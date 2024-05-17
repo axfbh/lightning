@@ -1,0 +1,17 @@
+# YOLOv7 🚀 by Ultralytics, AGPL-3.0 license
+
+# Parameters
+nc: 21  # number of classes
+anchors:
+  - [8]
+  - [16]
+  - [32]
+  - [64]
+  - [128]
+
+aspect_ratios:
+  - [1.0]
+  - [1.0]
+  - [1.0]
+  - [1.0]
+  - [1.0]

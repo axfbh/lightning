@@ -1,0 +1,17 @@
+如果使用 ddp模式，TorchMetric内部会 sync_dist 通信聚合操作
+
+
+on_step 和 on_epoch 同时使用，那么log()的 name 会追加 _step和 __epoch
+
+
+on_epoch=True，才有得到均值 loss
+
+
+This is section, model not to(device)
+    def configure_model(self)
+
+
+First move, model.to(device)
+    def configure_optimizers(self):
+
+global_step :  optimizer step times

@@ -1,0 +1,16 @@
+preds = non_max_suppression(preds, 0.001, 0.6, 300)
+
+val_targets = []
+for si in range(len(images)):
+    labels = targets[targets[:, 0] == si, 1:]
+    val_targets.append(
+        {'boxes': box_convert(labels[:, 1:5], 'cxcywh', 'xyxy'),
+         'labels': labels[:, 0].int() - 1}
+    )
+
+
+output[image_i] = {
+    'boxes': pred[i][:, 0:4],
+    'scores': pred[i][:, 4],
+    'labels': pred[i][:, 5].int(),
+}
