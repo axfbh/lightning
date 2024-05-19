@@ -4,6 +4,8 @@ from ops.models.neck.panet import PanNetTopDown
 from ops.models.head.yolo_head import YoloHead
 from ops.models.backbone.utils import _darknet_extractor
 from ops.models.backbone.darknet import DarkNet
+from ops.models.detection.utils import Yolo
+from ops.loss.yolo_loss import YoloLossV3
 
 
 class ConvolutionalLayer(nn.Sequential):

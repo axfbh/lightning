@@ -9,15 +9,10 @@ from ops.models.head.yolo_head import YoloV7Head
 from ops.models.backbone.elandarknet import ElanDarkNet, CBS, MP1, Elan
 from ops.models.backbone.utils import _elandarknet_extractor
 from ops.loss.yolo_loss import YoloLossV7
-from ops.utils.torch_utils import ModelEMA, smart_optimizer, smart_scheduler
-
-import lightning as pl
-from lightning import LightningModule
-# from torchmetrics.detection.mean_ap import MeanAveragePrecision
-from ops.metric.DetectionMetric import MeanAveragePrecision
+from ops.models.detection.utils import Yolo
 
 
-class YoloV7(LightningModule):
+class YoloV7(Yolo):
     def __init__(self, anchors: List, num_classes: int, phi: str):
         super(YoloV7, self).__init__()
 
@@ -93,85 +88,5 @@ class YoloV7(LightningModule):
 
         return self.head([P3, P4, P5], H, W)
 
-    def training_step(self, batch, batch_idx):
-        images, targets, shape = batch
-
-        images = images / 255.
-
-        image_size = torch.as_tensor(shape, device=self.device)
-
-        preds = self(images)
-
-        loss, loss_items = self.compute_loss(preds, targets, image_size)
-
-        self.log_dict({'box_loss': loss_items[0],
-                       'obj_loss': loss_items[1],
-                       'cls_loss': loss_items[2]},
-                      on_epoch=True, sync_dist=True, batch_size=self.trainer.train_dataloader.batch_size)
-
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        images, targets, shape = batch
-
-        images = images / 255.
-
-        image_size = torch.as_tensor(shape, device=self.device)
-
-        preds, train_out = self(images)
-
-        loss = self.compute_loss(train_out, targets, image_size)[1]  # box, obj, cls
-
-        if not self.trainer.sanity_checking:
-            self.map_metric.update(preds, targets)
-        return loss
-
-    def on_validation_epoch_end(self) -> None:
-        if not self.trainer.sanity_checking:
-            seen, nt, mp, mr, map50, map = self.map_metric.compute()
-
-            fitness = map * 0.9 + map50 * 0.1
-
-            self.log_dict({'Images': seen,
-                           'Instances': nt,
-                           'P': mp,
-                           'R': mr,
-                           'mAP50': map50,
-                           'mAP50-95': map,
-                           'fitness': fitness},
-                          on_epoch=True, sync_dist=True, batch_size=self.trainer.num_val_batches[0])
-
-            self.map_metric.reset()
-
     def on_fit_start(self) -> None:
         self.compute_loss = YoloLossV7(self)
-        self.ema_model = ModelEMA(self)
-
-    def optimizer_step(
-            self,
-            epoch: int,
-            batch_idx: int,
-            optimizer,
-            optimizer_closure=None,
-    ) -> None:
-        super(YoloV7, self).optimizer_step(epoch, batch_idx, optimizer, optimizer_closure)
-        ema_step = ceil(self.trainer.num_training_batches * 0.03)
-        if batch_idx % ema_step == 0 or batch_idx == self.trainer.num_training_batches:
-            self.ema_model.update(self)
-
-    def configure_model(self) -> None:
-        self.map_metric = MeanAveragePrecision(device=self.device, conf_thres=0.001, iou_thres=0.6, max_det=300)
-
-    def configure_optimizers(self):
-        optimizer = smart_optimizer(self,
-                                    self.optim,
-                                    self.hyp['lr'],
-                                    self.hyp['momentum'],
-                                    self.hyp['weight_decay'])
-
-        scheduler = smart_scheduler(optimizer,
-                                    self.sche,
-                                    self.current_epoch - 1,
-                                    T_max=self.trainer.max_epochs)
-
-        return [optimizer], [scheduler]

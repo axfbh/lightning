@@ -8,7 +8,7 @@ import torch.distributed
 
 from dataloader import create_dataloader
 
-from ops.models.detection.yolov7 import YoloV7
+from ops.models.detection import YoloV5, YoloV4, YoloV7
 from ops.utils import extract_ip
 from ops.utils.logging import print_args, logger_info_rank_zero_only, colorstr
 from ops.utils.callbacks import PlotLogger, WarmupLR
@@ -16,7 +16,7 @@ from ops.utils.callbacks import PlotLogger, WarmupLR
 import lightning as L
 from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.loggers import TensorBoardLogger
-from lightning.pytorch.callbacks import StochasticWeightAveraging, ModelCheckpoint
+from lightning.pytorch.callbacks import ModelCheckpoint
 from utils.callbacks import DetectProgressBar
 
 
@@ -25,15 +25,15 @@ def parse_opt():
 
     # -------------- 参数文件 --------------
     parser.add_argument("--weights", default='./runs/train1/checkpoints/last.pt', help="resume most recent training")
-    parser.add_argument("--cfg", type=str, default="./models/yolo-v7-l.yaml", help="models.yaml path")
+    parser.add_argument("--cfg", type=str, default="./models/yolo-v4-v5-n.yaml", help="models.yaml path")
     parser.add_argument("--data", type=str, default="./data/voc.yaml", help="dataset.yaml path")
-    parser.add_argument("--hyp", type=str, default="./data/hyp/hyp-yolo-v7-low.yaml", help="hyperparameters path")
+    parser.add_argument("--hyp", type=str, default="./data/hyp/hyp-yolo-v5-low.yaml", help="hyperparameters path")
 
     # -------------- 参数值 --------------
     parser.add_argument("--epochs", type=int, default=300, help="total training epochs")
-    parser.add_argument("--batch-size", type=int, default=4, help="total batch size for all GPUs")
+    parser.add_argument("--batch-size", type=int, default=16, help="total batch size for all GPUs")
     parser.add_argument("--image-size", type=list, default=[640, 640], help="train, val image size (pixels)")
-    parser.add_argument("--resume", nargs="?", const=True, default=True, help="resume most recent training")
+    parser.add_argument("--resume", nargs="?", const=True, default=False, help="resume most recent training")
     parser.add_argument("--device", default="gpu", help="cuda device, i.e. 0 or 0,1,2,3 or cpu")
     parser.add_argument("--single-cls", action="store_true", help="train multi-class data as single-class")
     parser.add_argument("--optimizer", type=str, choices=["SGD", "Adam", "AdamW"],
@@ -43,7 +43,7 @@ def parse_opt():
                         default="Cosine",
                         help="scheduler")
     parser.add_argument("--sync-bn", action="store_true", help="use SyncBatchNorm, only available in DDP mode")
-    parser.add_argument("--workers", type=int, default=2, help="max dataloader workers (per RANK in DDP mode)")
+    parser.add_argument("--workers", type=int, default=3, help="max dataloader workers (per RANK in DDP mode)")
     parser.add_argument("--project", default="./runs", help="save to project/name")
     parser.add_argument("--name", default="train", help="save to project/name")
     parser.add_argument("--label-smoothing", type=float, default=0.0, help="Label smoothing epsilon")
@@ -69,15 +69,13 @@ def setup(opt, hyp):
                                warmup_epoch=hyp["warmup_epochs"],
                                warmup_momentum=hyp['warmup_momentum'])
 
-    swa_callback = StochasticWeightAveraging(swa_lrs=1e-2)
-
     bar_callback = DetectProgressBar()
 
     plt_callback = PlotLogger(6)
 
     checkpoint_callback = ModelCheckpoint(filename='best',
                                           save_last=True,
-                                          monitor='fitness',
+                                          monitor='fitness_un',
                                           mode='max',
                                           auto_insert_metric_name=False,
                                           enable_version_counter=False)
@@ -85,15 +83,14 @@ def setup(opt, hyp):
 
     trainer = L.Trainer(accelerator=opt.device,
                         devices=1,
-                        num_nodes=1,
+                        # num_nodes=1,
                         logger=tb_logger,
                         max_epochs=opt.epochs,
-                        strategy=ddp,
+                        # strategy=ddp,
                         num_sanity_val_steps=1,
                         accumulate_grad_batches=accumulate,
                         log_every_n_steps=1,
                         callbacks=[warmup_callback,
-                                   swa_callback,
                                    bar_callback,
                                    plt_callback,
                                    checkpoint_callback])
@@ -110,7 +107,11 @@ def main(opt):
     data = OmegaConf.load(Path(opt.data))
     trainer = setup(opt, hyp)
 
-    model = YoloV7(anchors=cfg.anchors, num_classes=cfg.nc, phi='l')
+    # model = YoloV7(anchors=cfg.anchors, num_classes=cfg.nc, phi='l')
+    model = YoloV5(anchors=cfg.anchors,
+                   num_classes=cfg.nc,
+                   depth_multiple=cfg.depth_multiple,
+                   width_multiple=cfg.width_multiple)
 
     m = model.head  # detection head models
     nl = m.nl  # number of detection layers (to scale hyp)
@@ -132,9 +133,7 @@ def main(opt):
                                      hyp=hyp,
                                      image_set='car_train',
                                      augment=True,
-                                     local_rank=trainer.local_rank,
                                      rank=trainer.global_rank,
-                                     num_nodes=trainer.num_nodes,
                                      workers=opt.workers,
                                      shuffle=True,
                                      persistent_workers=True,

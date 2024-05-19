@@ -13,7 +13,7 @@ from albumentations.pytorch import ToTensorV2
 from ops.dataset.voc_dataset import VOCDetection
 from ops.dataset.utils import detect_collate_fn
 import ops.cv.io as io
-from ops.transform.resize_maker import ResizeLongestPaddingShort, ResizeShortLongest
+from ops.transform.resize_maker import ResizeLongestPaddingShort, ResizeShortLongest, Resize
 from ops.utils.logging import LOGGER, colorstr, logger_info_rank_zero_only
 from ops.utils.torch_utils import torch_distributed_zero_first
 import random
@@ -33,32 +33,32 @@ class MyDataSet(VOCDetection):
         super().__init__(*args, **kwargs)
 
     def __getitem__(self, item):
-        image, bbox_params, classes = super().__getitem__(item)
+        image, bboxes, classes = super().__getitem__(item)
 
-        resize_sample = ResizeLongestPaddingShort(self.image_size, shuffle=False)(image=image, bbox_params=bbox_params)
+        # resize_sample = ResizeLongestPaddingShort(self.image_size, shuffle=False)(image=image, bboxes=bboxes)
+        resize_sample = ResizeLongestPaddingShort([640, 640], always_apply=True)(image=image, bboxes=bboxes)
+        io.visualize(resize_sample['image'], resize_sample['bboxes'], classes, self.id2name)
 
-        # resize_sample = ResizeShortLongest(self.image_size)(image, bbox_params=bbox_params)
+        # resize_sample = ResizeShortLongest(self.image_size)(image, bboxes=bboxes)
 
-        # io.visualize(resize_sample['image'], resize_sample['bbox_params'], classes, self.id2name)
+        sample = {
+            'image': resize_sample['image'],
+            'bboxes': resize_sample['bboxes'],
+            'classes': classes
+        }
 
         if self.augment:
-            sample = self.transform(image=resize_sample['image'], bboxes=resize_sample['bbox_params'], classes=classes)
-        else:
-            sample = {
-                'image': resize_sample['image'],
-                'bboxes': resize_sample['bbox_params'],
-                'classes': classes
-            }
+            sample = self.transform(**sample)
 
         image = ToTensorV2()(image=sample['image'])['image'].float()
-        bbox_params = torch.FloatTensor(sample['bboxes'])
+        bboxes = torch.FloatTensor(sample['bboxes'])
         classes = torch.LongTensor(sample['classes'])[:, None]
 
-        nl = len(bbox_params)
+        nl = len(bboxes)
 
         if nl:
-            gxy = (bbox_params[:, 2:] + bbox_params[:, :2]) * 0.5
-            gwy = bbox_params[:, 2:] - bbox_params[:, :2]
+            gxy = (bboxes[:, 2:] + bboxes[:, :2]) * 0.5
+            gwy = bboxes[:, 2:] - bboxes[:, :2]
         else:
             gxy = torch.zeros((nl, 2))
             gwy = torch.zeros((nl, 2))
@@ -82,9 +82,7 @@ def create_dataloader(path,
                       image_set=None,
                       hyp=None,
                       augment=False,
-                      local_rank=0,
                       rank=0,
-                      num_nodes=1,
                       workers=3,
                       shuffle=False,
                       persistent_workers=False,

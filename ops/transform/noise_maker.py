@@ -50,32 +50,32 @@ class SaltPepperNoise(SalienceTransform):
     def __call__(self,
                  image: np.ndarray,
                  mask: np.ndarray = None,
-                 bbox_params: np.ndarray = None):
+                 bboxes: np.ndarray = None):
         """
 
         :param image: np.array[h,w,3] 增强图片
         :param mask: np.array[h,w] 增强 mask
-        :param bbox_params: np.array[[x0,y0,x1,y1],...] 增强 bbox
+        :param bboxes: np.array[[x0,y0,x1,y1],...] 增强 bbox
         :return:
         """
-        image, mask, bbox_params = super(SalienceTransform, self).__call__(image, mask, bbox_params)
+        image, mask, bboxes = super(SalienceTransform, self).__call__(image, mask, bboxes)
 
-        if self.salience and mask is None and bbox_params is None:
-            raise ValueError('salience 为 True 的时候，至少要有 mask 或 bbox_params')
+        if self.salience and mask is None and bboxes is None:
+            raise ValueError('salience 为 True 的时候，至少要有 mask 或 bboxes')
 
         if random.random() <= self.p:
-            image = self.apply(image, bbox_params)
+            image = self.apply(image, bboxes)
 
         return {"image": image,
                 "mask": mask,
-                "bbox_params": bbox_params}
+                "bboxes": bboxes}
 
     def apply(self,
               image: np.ndarray,
-              bbox_params=None):
+              bboxes=None):
 
         h, w = image.shape[:2]
-        salience_area = bbox_params.salience_area() if self.salience else np.array([-1, -1, -1, -1])
+        salience_area = bboxes.salience_area() if self.salience else np.array([-1, -1, -1, -1])
 
         noise_image, noise_mask = _salience_salt_pepper_noise(image, salience_area, self.n, self.color)
 
@@ -94,10 +94,10 @@ if __name__ == '__main__':
         x0, y0, x1, y1 = 25, 12, 430, 310
 
         var = SaltPepperNoise(p=1, saline=False, border_scale=0)(image,
-                                                                 bbox_params=np.array([[x0, y0, x1, y1]], dtype=float))
+                                                                 bboxes=np.array([[x0, y0, x1, y1]], dtype=float))
         var1 = cv2.rectangle(var['image'].copy(),
-                             var['bbox_params'][0, [0, 1]].astype(int),
-                             var['bbox_params'][0, [2, 3]].astype(int),
+                             var['bboxes'][0, [0, 1]].astype(int),
+                             var['bboxes'][0, [2, 3]].astype(int),
                              (255, 255, 0), 1)
         print(var1.shape)
-        io.show_window('ad', var1)
+        io.show('ad', var1)

@@ -41,7 +41,7 @@ class VOCDetection(Dataset):
 
     def __annotations(self, img_id):
         anno = ET.parse(self._annopath % img_id).getroot()
-        bbox_params = []
+        bboxes = []
         classes = []
         for obj in anno.iter("object"):
             _box = obj.find("bndbox")
@@ -54,15 +54,15 @@ class VOCDetection(Dataset):
             name = obj.find("name").text.lower().strip()
 
             if name == self.cate:
-                bbox_params.append(box)
+                bboxes.append(box)
                 classes.append(self.name2id[name])
 
-        bbox_params = np.array(bbox_params, dtype=np.float32)
-        return bbox_params, classes
+        bboxes = np.array(bboxes, dtype=np.float32)
+        return bboxes, classes
 
     def __getitem__(self, idx):
         image = io.imread(self._imgpath % self.img_ids[idx])
 
-        bbox_params, classes = self.__annotations(self.img_ids[idx])
+        bboxes, classes = self.__annotations(self.img_ids[idx])
 
-        return image, bbox_params, classes
+        return image, bboxes, classes

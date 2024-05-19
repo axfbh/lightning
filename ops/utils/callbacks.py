@@ -30,7 +30,7 @@ class PlotLogger(Callback):
                 name = result.meta.name
                 value = result.value
                 cumulated_batch_size = result.cumulated_batch_size
-                if name != 'fitness':
+                if not name.endswith('_un') and not name.endswith('_unplot'):
                     self.values[i].append((value / cumulated_batch_size).item())
                     plt.plot(np.array(self.values[i]), 'b', linewidth=2, label=name)
                     plt.grid(True)
@@ -121,7 +121,7 @@ class TQDMProgressBar(tqdm_progress.TQDMProgressBar):
             name = result.meta.name
             value = result.value
             cumulated_batch_size = result.cumulated_batch_size
-            if name != 'fitness':
+            if not name.endswith('_un') and not name.endswith('_unprint'):
                 res.append((value / cumulated_batch_size).item())
         return ("%11.4g" * len(res)) % (*res,)
 
@@ -153,7 +153,7 @@ class TQDMProgressBar(tqdm_progress.TQDMProgressBar):
                            batch_idx: int
                            ) -> None:
         n = batch_idx + 1
-        if self._should_update(n, self.train_progress_bar.total): # rank 0 更新 bar
+        if self._should_update(n, self.train_progress_bar.total):  # rank 0 更新 bar
             _update_n(self.train_progress_bar, n)
             mem = f"{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G"  # (GB)
             lr = trainer.optimizers[0].param_groups[0]['lr']
@@ -195,5 +195,5 @@ class TQDMProgressBar(tqdm_progress.TQDMProgressBar):
     def on_validation_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         self.val_progress_bar.close()
         self.reset_dataloader_idx_tracker()
-        if not trainer.sanity_checking and self.is_enabled: # rank 0 打印
+        if not trainer.sanity_checking and self.is_enabled:  # rank 0 打印
             LOGGER.info(self.get_description(trainer, pl_module))
