@@ -36,16 +36,9 @@ class MyDataSet(VOCDetection):
         image, bboxes, classes = super().__getitem__(item)
 
         # resize_sample = ResizeLongestPaddingShort(self.image_size, shuffle=False)(image=image, bboxes=bboxes)
-        resize_sample = ResizeLongestPaddingShort([640, 640], always_apply=True)(image=image, bboxes=bboxes)
-        io.visualize(resize_sample['image'], resize_sample['bboxes'], classes, self.id2name)
-
-        # resize_sample = ResizeShortLongest(self.image_size)(image, bboxes=bboxes)
-
-        sample = {
-            'image': resize_sample['image'],
-            'bboxes': resize_sample['bboxes'],
-            'classes': classes
-        }
+        # resize_sample = ResizeLongestPaddingShort([640, 640], always_apply=True)(image=image, bboxes=bboxes)
+        sample = ResizeLongestPaddingShort([640, 640], always_apply=True)(image=image, bboxes=bboxes, classes=classes)
+        # io.visualize(resize_sample['image'], resize_sample['bboxes'], classes, self.id2name)
 
         if self.augment:
             sample = self.transform(**sample)

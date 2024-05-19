@@ -83,10 +83,10 @@ def setup(opt, hyp):
 
     trainer = L.Trainer(accelerator=opt.device,
                         devices=1,
-                        # num_nodes=1,
+                        num_nodes=2,
                         logger=tb_logger,
                         max_epochs=opt.epochs,
-                        # strategy=ddp,
+                        strategy=ddp,
                         num_sanity_val_steps=1,
                         accumulate_grad_batches=accumulate,
                         log_every_n_steps=1,

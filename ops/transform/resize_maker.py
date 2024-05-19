@@ -31,7 +31,7 @@ class Resize(DualTransform):
                  always_apply=False,
                  p=0.5):
         super(Resize, self).__init__(always_apply, p)
-
+        self.image_size = image_size
         self.height, self.width = image_size
 
     def apply(self, img: np.ndarray, new_size, **params) -> np.ndarray:
@@ -63,6 +63,7 @@ class ResizeShortLongest(DualTransform):
                  always_apply=False,
                  p=0.5):
         super(ResizeShortLongest, self).__init__(always_apply, p)
+        self.image_size = image_size
         self.min_size, self.max_size = sorted(image_size)
 
     def apply(self, img: np.ndarray, min_size, max_size, **params) -> np.ndarray:
@@ -113,6 +114,7 @@ class ResizeLongestPaddingShort(DualTransform):
 
         :return:
         """
+        self.image_size = image_size
         super(ResizeLongestPaddingShort, self).__init__()
         self.min_size, self.max_size = sorted(image_size)
         self.shuffle = shuffle
