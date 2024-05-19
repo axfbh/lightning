@@ -82,7 +82,7 @@ def setup(opt, hyp):
     checkpoint_callback.FILE_EXTENSION = '.pt'
 
     trainer = L.Trainer(accelerator=opt.device,
-                        devices=2,
+                        devices=1,
                         num_nodes=1,
                         logger=tb_logger,
                         max_epochs=opt.epochs,
