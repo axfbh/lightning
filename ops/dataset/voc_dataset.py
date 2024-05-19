@@ -10,10 +10,9 @@ import ops.cv.io as io
 
 class VOCDetection(Dataset):
 
-    def __init__(self, root_dir, image_set, image_size, class_name, augment, transform=None):
+    def __init__(self, root_dir, image_set, image_size, class_name, transform=None):
         super(VOCDetection, self).__init__()
 
-        self.augment = augment
         self._annopath = os.path.join(root_dir, "Annotations", "%s.xml")
         self._imgpath = os.path.join(root_dir, "JPEGImages", "%s.jpg")
         self._imgsetpath = os.path.join(root_dir, "ImageSets", "Main", "%s.txt")

@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+
+import cv2
 from omegaconf import OmegaConf
 
 import torch
@@ -13,7 +15,7 @@ from albumentations.pytorch import ToTensorV2
 from ops.dataset.voc_dataset import VOCDetection
 from ops.dataset.utils import detect_collate_fn
 import ops.cv.io as io
-from ops.transform.resize_maker import ResizeLongestPaddingShort, ResizeShortLongest, Resize
+from ops.transform.resize_maker import ResizeShortLongest
 from ops.utils.logging import LOGGER, colorstr, logger_info_rank_zero_only
 from ops.utils.torch_utils import torch_distributed_zero_first
 import random
@@ -32,16 +34,19 @@ class MyDataSet(VOCDetection):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.resize = A.Compose([
+            ResizeShortLongest(self.image_size, always_apply=True),
+            A.PadIfNeeded(*self.image_size, always_apply=True, border_mode=cv2.BORDER_CONSTANT, value=(114, 114, 114))
+        ], A.BboxParams(format='pascal_voc', label_fields=['classes']))
+
     def __getitem__(self, item):
         image, bboxes, classes = super().__getitem__(item)
 
-        # resize_sample = ResizeLongestPaddingShort(self.image_size, shuffle=False)(image=image, bboxes=bboxes)
-        # resize_sample = ResizeLongestPaddingShort([640, 640], always_apply=True)(image=image, bboxes=bboxes)
-        sample = ResizeLongestPaddingShort([640, 640], always_apply=True)(image=image, bboxes=bboxes, classes=classes)
-        # io.visualize(resize_sample['image'], resize_sample['bboxes'], classes, self.id2name)
+        sample = self.resize(image=image, bboxes=bboxes, classes=classes)
 
-        if self.augment:
-            sample = self.transform(**sample)
+        sample = self.transform(**sample)
+
+        # io.visualize(sample['image'], sample['bboxes'], classes, self.id2name)
 
         image = ToTensorV2()(image=sample['image'])['image'].float()
         bboxes = torch.FloatTensor(sample['bboxes'])
@@ -94,7 +99,7 @@ def create_dataloader(path,
         A.HueSaturationValue(p=0.8),
         A.HorizontalFlip(p=hyp.fliplr),
         A.VerticalFlip(p=hyp.flipud),
-    ], A.BboxParams(format='pascal_voc', label_fields=['classes']))
+    ], A.BboxParams(format='pascal_voc', label_fields=['classes']), p=augment)
 
     if augment:
         logger_info_rank_zero_only(f"{colorstr('albumentations: ')}" + ", ".join(
@@ -104,8 +109,7 @@ def create_dataloader(path,
                         image_set=image_set,
                         image_size=image_size,
                         class_name=names,
-                        augment=augment,
-                        transform=transform if augment else None)
+                        transform=transform)
 
     batch_size = min(batch_size, len(dataset))
     nd = torch.cuda.device_count()  # number of CUDA devices
