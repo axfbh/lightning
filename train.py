@@ -17,6 +17,8 @@ import lightning as L
 from lightning.pytorch.strategies import DDPStrategy
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import GradientAccumulationScheduler
+
 from utils.callbacks import DetectProgressBar
 
 
@@ -24,7 +26,7 @@ def parse_opt():
     parser = argparse.ArgumentParser()
 
     # -------------- 参数文件 --------------
-    parser.add_argument("--weights", default='./runs/train1/checkpoints/last.pt', help="resume most recent training")
+    parser.add_argument("--weights", default='./runs/train/checkpoints/last.pt', help="resume most recent training")
     parser.add_argument("--cfg", type=str, default="./models/yolo-v4-v5-n.yaml", help="models.yaml path")
     parser.add_argument("--data", type=str, default="./data/voc.yaml", help="dataset.yaml path")
     parser.add_argument("--hyp", type=str, default="./data/hyp/hyp-yolo-v5-low.yaml", help="hyperparameters path")
@@ -37,7 +39,7 @@ def parse_opt():
     parser.add_argument("--device", default="gpu", help="cuda device, i.e. 0 or 0,1,2,3 or cpu")
     parser.add_argument("--single-cls", action="store_true", help="train multi-class data as single-class")
     parser.add_argument("--optimizer", type=str, choices=["SGD", "Adam", "AdamW"],
-                        default="SGD",
+                        default="AdamW",
                         help="optimizer")
     parser.add_argument("--scheduler", type=str, choices=["Cosine", "MultiStep", "Polynomial", "OneCycleLR"],
                         default="Cosine",
@@ -59,6 +61,8 @@ def setup(opt, hyp):
     batch_size = opt.batch_size
     nbs = 64  # nominal batch size
     accumulate = max(round(nbs / batch_size), 1)
+
+    accumulator_callback = GradientAccumulationScheduler(scheduling={0: 1, 3: accumulate})
 
     tb_logger = TensorBoardLogger(save_dir=opt.project, name=opt.name)
 
@@ -82,18 +86,20 @@ def setup(opt, hyp):
     checkpoint_callback.FILE_EXTENSION = '.pt'
 
     trainer = L.Trainer(accelerator=opt.device,
-                        devices=2,
+                        devices=1,
                         num_nodes=1,
                         logger=tb_logger,
                         max_epochs=opt.epochs,
                         strategy=ddp,
                         num_sanity_val_steps=1,
-                        accumulate_grad_batches=accumulate,
                         log_every_n_steps=1,
-                        callbacks=[warmup_callback,
-                                   bar_callback,
-                                   plt_callback,
-                                   checkpoint_callback])
+                        callbacks=[
+                            accumulator_callback,
+                            warmup_callback,
+                            bar_callback,
+                            plt_callback,
+                            checkpoint_callback
+                        ])
 
     print_args(vars(opt))
     logger_info_rank_zero_only(colorstr("hyperparameters: ") + ", ".join(f"{k}={v}" for k, v in hyp.items()))

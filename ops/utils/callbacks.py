@@ -58,19 +58,29 @@ class WarmupLR(Callback):
                              pl_module: "pl.LightningModule",
                              batch: Any,
                              batch_idx: int) -> None:
-        it = trainer.global_step
+        ni = trainer.global_step
         warmup_iter = self.warmup_epoch * trainer.num_training_batches
-        if it < warmup_iter:
+        if ni <= warmup_iter:
             xi = [0, warmup_iter]  # x interp
-            for optimizer in trainer.optimizers:
+            for i, optimizer in enumerate(trainer.optimizers):
                 for j, x in enumerate(optimizer.param_groups):
-                    x["lr"] = np.interp(it,
-                                        xi,
-                                        [self.warmup_bias_lr if j == 0 else 0.0, x["initial_lr"]])
+                    shc_lr = trainer.lr_scheduler_configs[i].scheduler._get_closed_form_lr()[j] * (0.01 - 1) + 1
+                    new_lr = x["initial_lr"] * shc_lr
+                    x["lr"] = np.interp(
+                        ni,
+                        xi,
+                        [self.warmup_bias_lr if j == 0 else 0.0, new_lr]
+                    )
                     if "momentum" in x:
-                        x["momentum"] = np.interp(it,
-                                                  xi,
-                                                  [self.warmup_momentum, self.momentum])
+                        x["momentum"] = np.interp(
+                            ni,
+                            xi,
+                            [self.warmup_momentum, self.momentum]
+                        )
+        # elif ni == warmup_iter + 1:
+        #     for i, optimizer in enumerate(trainer.optimizers):
+        #         for j, x in enumerate(optimizer.param_groups):
+        #             x["lr"] = x["initial_lr"]
 
 
 TQDM_BAR_FORMAT = "{l_bar}{bar:10}{r_bar}"  # tqdm bar format
