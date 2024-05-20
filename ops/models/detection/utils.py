@@ -55,7 +55,7 @@ class Yolo(LightningModule):
                            'mAP50': map50,
                            'mAP50-95': map,
                            'fitness_un': fitness},
-                          on_epoch=True, sync_dist=True, batch_size=self.trainer.num_val_batches[0])
+                          on_epoch=True, sync_dist=True, batch_size=self.trainer.val_dataloaders.batch_size)
 
             self.map_metric.reset()
 
@@ -67,9 +67,8 @@ class Yolo(LightningModule):
             optimizer_closure=None,
     ) -> None:
         super(Yolo, self).optimizer_step(epoch, batch_idx, optimizer, optimizer_closure)
-        ema_step = ceil(self.trainer.num_training_batches * 0.03)
-        if batch_idx % ema_step == 0 or batch_idx == self.trainer.num_training_batches:
-            self.ema_model.update(self)
+        # ema_step = ceil(self.trainer.num_training_batches * 0.03)
+        self.ema_model.update(self)
 
     def configure_model(self) -> None:
         self.map_metric = MeanAveragePrecision(device=self.device, conf_thres=0.001, iou_thres=0.6, max_det=300)
