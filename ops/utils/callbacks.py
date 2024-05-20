@@ -77,10 +77,6 @@ class WarmupLR(Callback):
                             xi,
                             [self.warmup_momentum, self.momentum]
                         )
-        # elif ni == warmup_iter + 1:
-        #     for i, optimizer in enumerate(trainer.optimizers):
-        #         for j, x in enumerate(optimizer.param_groups):
-        #             x["lr"] = x["initial_lr"]
 
 
 TQDM_BAR_FORMAT = "{l_bar}{bar:10}{r_bar}"  # tqdm bar format
