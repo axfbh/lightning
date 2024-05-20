@@ -84,6 +84,7 @@ class Yolo(LightningModule):
         scheduler = smart_scheduler(optimizer,
                                     self.sche,
                                     self.current_epoch - 1,
+                                    eta_min=1,
                                     T_max=self.trainer.max_epochs)
 
         self.ema_model = ModelEMA(self)
