@@ -45,7 +45,8 @@ class MyDataSet(VOCDetection):
 
         sample = self.resize(image=image, bboxes=bboxes, classes=classes)
 
-        sample = self.transform(**sample)
+        if self.augment:
+            sample = self.transform(**sample)
 
         # io.visualize(sample['image'], sample['bboxes'], classes, self.id2name)
 
@@ -87,20 +88,20 @@ def create_dataloader(path,
                       persistent_workers=False,
                       seed=0):
     transform = A.Compose([
-        A.Affine(scale={"x": (1 - hyp.scale, 1 + hyp.scale),
-                        "y": (1 - hyp.scale, 1 + hyp.scale)},
-                 translate_percent={"x": (0.5 - hyp.translate, 0.5 + hyp.translate),
-                                    "y": (0.5 - hyp.translate, 0.5 + hyp.translate)},
-                 cval=114,
-                 p=0.8),
+        # A.Affine(scale={"x": (1 - hyp.scale, 1 + hyp.scale),
+        #                 "y": (1 - hyp.scale, 1 + hyp.scale)},
+        #          translate_percent={"x": (0.5 - hyp.translate, 0.5 + hyp.translate),
+        #                             "y": (0.5 - hyp.translate, 0.5 + hyp.translate)},
+        #          cval=114,
+        #          p=0.8),
         A.Blur(p=0.01),
         A.MedianBlur(p=0.01),
         A.ToGray(p=0.01),
         A.CLAHE(p=0.01),
-        A.HueSaturationValue(p=0.8),
+        # A.HueSaturationValue(p=0.8),
         A.HorizontalFlip(p=hyp.fliplr),
         A.VerticalFlip(p=hyp.flipud),
-    ], A.BboxParams(format='pascal_voc', label_fields=['classes']), p=augment)
+    ], A.BboxParams(format='pascal_voc', label_fields=['classes']))
 
     if augment:
         rank_zero_info(f"{colorstr('albumentations: ')}" + ", ".join(
@@ -110,6 +111,7 @@ def create_dataloader(path,
                         image_set=image_set,
                         image_size=image_size,
                         class_name=names,
+                        augment=augment,
                         transform=transform)
 
     batch_size = min(batch_size, len(dataset))
