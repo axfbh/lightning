@@ -40,7 +40,7 @@ def parse_opt():
     parser.add_argument("--device", default="gpu", help="cuda device, i.e. 0 or 0,1,2,3 or cpu")
     parser.add_argument("--single-cls", action="store_true", help="train multi-class data as single-class")
     parser.add_argument("--optimizer", type=str, choices=["SGD", "Adam", "AdamW"],
-                        default="AdamW",
+                        default="SGD",
                         help="optimizer")
     parser.add_argument("--scheduler", type=str, choices=["Cosine", "MultiStep", "Polynomial", "OneCycleLR"],
                         default="Cosine",
