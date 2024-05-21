@@ -16,7 +16,8 @@ from ops.dataset.voc_dataset import VOCDetection
 from ops.dataset.utils import detect_collate_fn
 import ops.cv.io as io
 from ops.transform.resize_maker import ResizeShortLongest
-from ops.utils.logging import LOGGER, colorstr, logger_info_rank_zero_only
+from ops.utils.logging import colorstr
+from lightning.fabric.utilities.rank_zero import rank_zero_info
 from ops.utils.torch_utils import torch_distributed_zero_first
 import random
 
@@ -102,7 +103,7 @@ def create_dataloader(path,
     ], A.BboxParams(format='pascal_voc', label_fields=['classes']), p=augment)
 
     if augment:
-        logger_info_rank_zero_only(f"{colorstr('albumentations: ')}" + ", ".join(
+        rank_zero_info(f"{colorstr('albumentations: ')}" + ", ".join(
             f"{x}".replace("always_apply=False, ", "") for x in transform if x.p))
 
     dataset = MyDataSet(path,

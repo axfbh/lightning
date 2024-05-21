@@ -15,47 +15,9 @@ from torch.nn.parameter import is_lazy
 from torchvision.ops.boxes import box_convert
 import torch.distributed as dist
 
-from ops.utils.logging import LOGGER, colorstr
+from ops.utils.logging import colorstr
 from lightning import Callback
-from lightning.fabric.utilities.rank_zero import rank_zero_only
-from ops.utils.logging import logger_info_rank_zero_only
-
-
-def select_device(device="", batch_size=0, newline=True):
-    # device = None or 'cpu' or 0 or '0' or '0,1,2,3'
-    s = f"Python-{platform.python_version()} torch-{torch.__version__} "
-    device = str(device).strip().lower().replace("cuda:", "").replace("none", "")  # to string, 'cuda:0' to '0'
-    cpu = device == "cpu"
-    mps = device == "mps"  # Apple Metal Performance Shaders (MPS)
-    if cpu or mps:
-        os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # force torch.cuda.is_available() = False
-    elif device:  # non-cpu device requested
-        os.environ["CUDA_VISIBLE_DEVICES"] = device  # set environment variable - must be before assert is_available()
-        assert torch.cuda.is_available() and torch.cuda.device_count() >= len(
-            device.replace(",", "")
-        ), f"Invalid CUDA '--device {device}' requested, use '--device cpu' or pass valid CUDA device(s)"
-
-    if not cpu and not mps and torch.cuda.is_available():  # prefer GPU if available
-        devices = device.split(",") if device else "0"  # range(torch.cuda.device_count())  # i.e. 0,1,6,7
-        n = len(devices)  # device count
-        if n > 1 and batch_size > 0:  # check batch_size is divisible by device_count
-            assert batch_size % n == 0, f"batch-size {batch_size} not multiple of GPU count {n}"
-        space = " " * (len(s) + 1)
-        for i, d in enumerate(devices):
-            p = torch.cuda.get_device_properties(i)
-            s += f"{'' if i == 0 else space}CUDA:{d} ({p.name}, {p.total_memory / (1 << 20):.0f}MiB)\n"  # bytes to MB
-        arg = "cuda:0"
-    elif mps and getattr(torch, "has_mps", False) and torch.backends.mps.is_available():  # prefer MPS if available
-        s += "MPS\n"
-        arg = "mps"
-    else:  # revert to CPU
-        s += "CPU\n"
-        arg = "cpu"
-
-    if not newline:
-        s = s.rstrip()
-    LOGGER.info(s)
-    return torch.device(arg)
+from lightning.fabric.utilities.rank_zero import rank_zero_info
 
 
 @torch.no_grad()
@@ -103,8 +65,8 @@ def smart_optimizer(model, name: str = "Adam", lr=0.001, momentum=0.9, decay=1e-
     optimizer.add_param_group({"params": g[0], "weight_decay": decay})  # add g0 with weight_decay
     optimizer.add_param_group({"params": g[1], "weight_decay": 0.0})  # add g1 (BatchNorm2d weights)
 
-    logger_info_rank_zero_only(f"{colorstr('optimizer:')} {type(optimizer).__name__}(lr={lr}) with parameter groups "
-                               f'{len(g[1])} weight(decay=0.0), {len(g[0])} weight(decay={decay}), {len(g[2])} bias')
+    rank_zero_info(f"{colorstr('optimizer:')} {type(optimizer).__name__}(lr={lr}) with parameter groups "
+                   f'{len(g[1])} weight(decay=0.0), {len(g[0])} weight(decay={decay}), {len(g[2])} bias')
     return optimizer
 
 
@@ -134,63 +96,9 @@ def smart_scheduler(optimizer, name: str = "Cosine", last_epoch=1, **kwargs):
         raise NotImplementedError(f"Optimizer {name} not implemented.")
 
     args = {k: v for k, v in kwargs.items()}
-    logger_info_rank_zero_only(f"{colorstr('scheduler:')} {type(scheduler).__name__}(" + ", ".join(
+    rank_zero_info(f"{colorstr('scheduler:')} {type(scheduler).__name__}(" + ", ".join(
         f"{k}={v}" for k, v in args.items()) + ")")
     return scheduler
-
-
-def smart_resume(model, optimizer, ema=None, epochs=300, resume=False, save_path: Path = None):
-    last_epoch = -1
-    last_iter = -1
-    best_fitness = None
-    if not resume or save_path is None or not save_path.is_file():
-        if resume:
-            LOGGER.warning(
-                f"{colorstr('Warning:')} Noting to resume"
-            )
-        start_epoch = last_epoch + 1
-        return best_fitness, last_iter, last_epoch, start_epoch, epochs
-
-    save_dict = torch.load(save_path, map_location='cpu')
-
-    # ------------ resume models ------------
-    model_param = save_dict['models'].state_dict()
-    _load_from(model, model_param)
-
-    last_epoch = save_dict.get('last_epoch', last_epoch)
-    last_iter = save_dict.get('last_iter', last_iter)
-    start_epoch = last_epoch + 1
-
-    best_fitness = save_dict.get('best_fitness', best_fitness)
-
-    LOGGER.info(
-        f"{colorstr('models loaded:')} Resuming training from {save_path} from epoch {start_epoch} to {epochs} total epochs"
-    )
-
-    # ------------ resume ema ------------
-    ema_param = save_dict.get('ema', None)
-
-    if ema is not None and ema_param is not None:
-        ema.ema.load_state_dict(ema_param.state_dict())  # EMA
-        ema.updates = save_dict["updates"]
-
-    # ------------ resume optimizer ------------
-    optim_param = save_dict.get('optimizer', None)
-    optim_name = save_dict.get('optimizer_name', None)
-
-    if optim_name == optimizer.__class__.__name__ and optim_param is not None:
-        optimizer.load_state_dict(optim_param)
-        for param in optimizer.param_groups:
-            LOGGER.info(
-                f"{colorstr('optimizer loaded:')} {type(optimizer).__name__}(lr={param['lr']}) with parameter groups"
-                f"{len(param)} weight(decay={param['weight_decay']})"
-            )
-    else:
-        LOGGER.warning(
-            f"{colorstr('Warning:')} Cannot loaded the optimizer parameter, but it doesnt affect the models working."
-        )
-
-    return best_fitness, last_iter, last_epoch, start_epoch, epochs
 
 
 @contextmanager

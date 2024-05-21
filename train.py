@@ -10,7 +10,7 @@ from dataloader import create_dataloader
 
 from ops.models.detection import YoloV5, YoloV4, YoloV7
 from ops.utils import extract_ip
-from ops.utils.logging import print_args, logger_info_rank_zero_only, colorstr
+from ops.utils.logging import print_args, colorstr
 from ops.utils.callbacks import PlotLogger, WarmupLR
 
 import lightning as L
@@ -20,6 +20,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.callbacks import GradientAccumulationScheduler
 
 from utils.callbacks import DetectProgressBar
+from lightning.fabric.utilities.rank_zero import rank_zero_info
 
 
 def parse_opt():
@@ -61,8 +62,9 @@ def setup(opt, hyp):
     batch_size = opt.batch_size
     nbs = 64  # nominal batch size
     accumulate = max(round(nbs / batch_size), 1)
+    warmup_epochs = hyp["warmup_epochs"] + 1
 
-    accumulator_callback = GradientAccumulationScheduler(scheduling={0: 1, 3: accumulate})
+    accumulator_callback = GradientAccumulationScheduler(scheduling={0: 1, warmup_epochs: accumulate})
 
     tb_logger = TensorBoardLogger(save_dir=opt.project, name=opt.name)
 
@@ -70,7 +72,7 @@ def setup(opt, hyp):
 
     warmup_callback = WarmupLR(momentum=hyp['momentum'],
                                warmup_bias_lr=hyp['warmup_bias_lr'],
-                               warmup_epoch=hyp["warmup_epochs"],
+                               warmup_epoch=warmup_epochs,
                                warmup_momentum=hyp['warmup_momentum'])
 
     bar_callback = DetectProgressBar()
@@ -102,7 +104,7 @@ def setup(opt, hyp):
                         ])
 
     print_args(vars(opt))
-    logger_info_rank_zero_only(colorstr("hyperparameters: ") + ", ".join(f"{k}={v}" for k, v in hyp.items()))
+    rank_zero_info(colorstr("hyperparameters: ") + ", ".join(f"{k}={v}" for k, v in hyp.items()))
 
     return trainer
 

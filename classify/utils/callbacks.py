@@ -1,11 +1,11 @@
 from ops.utils.callbacks import TQDMProgressBar
-from ops.utils.logging import LOGGER
+from lightning_utilities.core.rank_zero import _info
 
 
 class ClassifyProgressBar(TQDMProgressBar):
 
     def get_train_tile(self) -> None:
-        LOGGER.info(
+        _info(
             ("\n" + "%11s" * 4) %
             ("Epoch", "GPU_mem", "lr", "loss")
         )

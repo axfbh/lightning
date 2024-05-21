@@ -7,10 +7,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import torch
-from ops.utils.logging import LOGGER
 
 import lightning as pl
 from lightning.pytorch.callbacks import Callback
+from lightning_utilities.core.rank_zero import _info
 from lightning.fabric.utilities.rank_zero import rank_zero_only
 from lightning.pytorch.utilities.types import STEP_OUTPUT
 from lightning.pytorch.callbacks.progress.tqdm_progress import _update_n, convert_inf, Tqdm
@@ -59,12 +59,13 @@ class WarmupLR(Callback):
                              batch: Any,
                              batch_idx: int) -> None:
         ni = trainer.global_step
-        warmup_iter = self.warmup_epoch * trainer.num_training_batches
+        warmup_iter = self.warmup_epoch * (trainer.num_training_batches + 1)
         if ni <= warmup_iter:
             xi = [0, warmup_iter]  # x interp
             for i, optimizer in enumerate(trainer.optimizers):
                 for j, x in enumerate(optimizer.param_groups):
                     new_lr = trainer.lr_scheduler_configs[i].scheduler._get_closed_form_lr()[j]
+                    # new_lr = 0.01
                     x["lr"] = np.interp(
                         ni,
                         xi,
@@ -201,4 +202,4 @@ class TQDMProgressBar(tqdm_progress.TQDMProgressBar):
         self.val_progress_bar.close()
         self.reset_dataloader_idx_tracker()
         if not trainer.sanity_checking and self.is_enabled:  # rank 0 打印
-            LOGGER.info(self.get_description(trainer, pl_module))
+            _info(self.get_description(trainer, pl_module))
