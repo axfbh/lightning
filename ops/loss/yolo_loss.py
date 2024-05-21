@@ -360,7 +360,7 @@ class YoloLossV5(YoloLoss):
             if nb:
                 ps = pi[b, a, gj, gi]
 
-                pxy = torch.sigmoid(ps[:, 0:2]) * 3 - 1
+                pxy = torch.sigmoid(ps[:, 0:2]) * 2 - 0.5
 
                 pwh = (torch.sigmoid(ps[:, 2:4]) * 2) ** 2 * anchors[i]
 
@@ -494,7 +494,7 @@ class YoloLossV7(YoloLoss):
             if nb:
                 ps = pi[b, a, gj, gi]
 
-                pxy = torch.sigmoid(ps[:, 0:2]) * 2 - 0.5
+                pxy = torch.sigmoid(ps[:, 0:2]) * 3 - 1
 
                 pwh = (torch.sigmoid(ps[:, 2:4]) * 2) ** 2 * anchors[i]
 
