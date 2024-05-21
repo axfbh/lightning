@@ -93,6 +93,9 @@ def setup(opt, hyp):
                         logger=tb_logger,
                         max_epochs=opt.epochs,
                         strategy=ddp,
+                        gradient_clip_val=10.0,
+                        # clip gradients' global norm to <=10.0 using gradient_clip_algorithm='norm'
+                        gradient_clip_algorithm="norm",
                         num_sanity_val_steps=1,
                         log_every_n_steps=1,
                         callbacks=[

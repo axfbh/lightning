@@ -1,10 +1,10 @@
-from math import ceil
+from typing import Any
 import torch
 
+from ops.metric.DetectionMetric import MeanAveragePrecision
 from ops.utils.torch_utils import ModelEMA, smart_optimizer, smart_scheduler
 
 from lightning import LightningModule
-from ops.metric.DetectionMetric import MeanAveragePrecision
 
 
 class Yolo(LightningModule):
@@ -59,15 +59,7 @@ class Yolo(LightningModule):
 
             self.map_metric.reset()
 
-    def optimizer_step(
-            self,
-            epoch: int,
-            batch_idx: int,
-            optimizer,
-            optimizer_closure=None,
-    ) -> None:
-        super(Yolo, self).optimizer_step(epoch, batch_idx, optimizer, optimizer_closure)
-        # ema_step = ceil(self.trainer.num_training_batches * 0.03)
+    def on_train_batch_end(self, outputs, batch: Any, batch_idx: int) -> None:
         self.ema_model.update(self)
 
     def configure_model(self) -> None:

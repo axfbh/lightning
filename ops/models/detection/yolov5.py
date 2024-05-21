@@ -1,4 +1,5 @@
 import torch
+from torch import Tensor
 import torch.nn as nn
 import math
 from ops.models.backbone.cspdarknet import CSPDarknetV2, CBM, WrapLayer
