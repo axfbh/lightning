@@ -360,7 +360,7 @@ class YoloLossV5(YoloLoss):
             if nb:
                 ps = pi[b, a, gj, gi]
 
-                pxy = torch.sigmoid(ps[:, 0:2]) * 2 - 0.5
+                pxy = torch.sigmoid(ps[:, 0:2]) * 3 - 1
 
                 pwh = (torch.sigmoid(ps[:, 2:4]) * 2) ** 2 * anchors[i]
 
@@ -402,12 +402,8 @@ class YoloLossV7(YoloLoss):
             # ----------- 网格 ——----------
             x, y = torch.tensor([[0, 0],
                                  [1, 0],
-                                 [1, 1],
-                                 [1, -1],
                                  [0, 1],
                                  [-1, 0],
-                                 [-1, -1],
-                                 [-1, 1],
                                  [0, -1]], device=self.device, dtype=torch.float32).mul(1.0).chunk(2, 1)
 
             identity = torch.zeros_like(x)
@@ -441,16 +437,6 @@ class YoloLossV7(YoloLoss):
                                   gh - identity],
                                  -1)
 
-                # j：左格左上角
-                j = tb[0, :, 4] % 1 < 0.5
-                # k：上格左上角
-                k = tb[0, :, 5] % 1 < 0.5
-                # l：右格左上角
-                l = ~j
-                # m：下格左上角
-                m = ~k
-                j = torch.stack([torch.ones_like(j), j, k, l, m])
-                tb = tb[j]
                 j = torch.bitwise_and(0 <= tb[..., 4:6], tb[..., 4:6] < ng[[1, 0]]).all(-1)
                 tb = tb[j]
 
@@ -508,7 +494,7 @@ class YoloLossV7(YoloLoss):
             if nb:
                 ps = pi[b, a, gj, gi]
 
-                pxy = torch.sigmoid(ps[:, 0:2]) * 3 - 1
+                pxy = torch.sigmoid(ps[:, 0:2]) * 2 - 0.5
 
                 pwh = (torch.sigmoid(ps[:, 2:4]) * 2) ** 2 * anchors[i]
 

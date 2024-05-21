@@ -43,18 +43,19 @@ class VOCDetection(Dataset):
         bboxes = []
         classes = []
         for obj in anno.iter("object"):
-            _box = obj.find("bndbox")
-            box = [
-                _box.find("xmin").text,
-                _box.find("ymin").text,
-                _box.find("xmax").text,
-                _box.find("ymax").text,
-            ]
-            name = obj.find("name").text.lower().strip()
+            if obj.find('difficult').text == '0':
+                _box = obj.find("bndbox")
+                box = [
+                    _box.find("xmin").text,
+                    _box.find("ymin").text,
+                    _box.find("xmax").text,
+                    _box.find("ymax").text,
+                ]
+                name = obj.find("name").text.lower().strip()
 
-            if name == self.cate:
-                bboxes.append(box)
-                classes.append(self.name2id[name])
+                if name == self.cate:
+                    bboxes.append(box)
+                    classes.append(self.name2id[name])
 
         bboxes = np.array(bboxes, dtype=np.float32)
         return bboxes, classes
