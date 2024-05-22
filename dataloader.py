@@ -157,7 +157,7 @@ class MyDataSet(VOCDetection):
 
         bboxes = torch.FloatTensor(bboxes)
         classes = torch.LongTensor(classes)
-        image = ToTensorV2()(image=sample['image'])['image'].float()
+        image = ToTensorV2()(image=image)['image'].float()
 
         # io.visualize(sample['image'], sample['bboxes'], classes, self.id2name)
 
@@ -169,6 +169,7 @@ class MyDataSet(VOCDetection):
         else:
             gxy = torch.zeros((nl, 2))
             gwy = torch.zeros((nl, 2))
+            classes = torch.zeros((nl, 1))
 
         indices = torch.zeros_like(classes)
 
