@@ -151,7 +151,7 @@ class MyDataSet(VOCDetection):
         bboxes = np.array(sample['bboxes'])
         classes = np.array(sample['classes'])[:, None]
 
-        image, bboxes = random_perspective(image, torch.cat([classes, bboxes], -1), 0, 0.1, 0.5, 0, 0)
+        image, bboxes = random_perspective(image, np.concatenate([classes, bboxes], -1), 0, 0.1, 0.5, 0, 0)
         bboxes, classes = bboxes[:, 1:], classes[:, 0:1]
         augment_hsv(image, hgain=0.015, sgain=0.7, vgain=0.4)
 
