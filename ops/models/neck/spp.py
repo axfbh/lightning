@@ -7,13 +7,37 @@ from functools import partial
 class SPP(nn.Module):
     def __init__(self, ksizes=(5, 9, 13)):
         """
-            SpatialPyramidPooling 空间金字塔池化
+            SpatialPyramidPooling 空间金字塔池化, SPP 返回包含自己
         """
         super(SPP, self).__init__()
         self.make_layers = nn.ModuleList([nn.MaxPool2d(kernel_size=k, stride=1, padding=(k - 1) // 2) for k in ksizes])
 
     def forward(self, x):
-        return torch.cat([x] + [m(x) for m in self.make_layers], 1)
+        return torch.cat([m(x) for m in self.make_layers], 1)
+
+
+class SPPF(nn.Module):
+    # Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv3 by Glenn Jocher
+    def __init__(self, c1, c2, ksizes=(5, 9, 13), conv_layer=None,
+                 activation_layer=nn.ReLU):  # equivalent to SPP(k=(5, 9, 13))
+        super().__init__()
+
+        Conv = partial(Conv2dNormActivation,
+                       bias=False,
+                       inplace=False,
+                       norm_layer=nn.BatchNorm2d,
+                       activation_layer=activation_layer) if conv_layer is None else conv_layer
+
+        c_ = c1 // 2  # hidden channels
+        self.cv1 = Conv(c1, c_, 1, 1)
+        self.cv2 = Conv(c_ * 4, c2, 1, 1)
+        self.m = SPP(ksizes)
+
+    def forward(self, x):
+        x = self.cv1(x)
+        y1 = self.m(x)
+        y2 = self.m(y1)
+        return self.cv2(torch.cat((x, y1, y2, self.m(y2)), 1))
 
 
 class SPPCSPC(nn.Module):

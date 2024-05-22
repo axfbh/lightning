@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 from functools import partial
 from torchvision.ops.misc import Conv2dNormActivation
-from ops.models.neck.spp import SPP
+from ops.models.neck.spp import SPP, SPPF
 
 BN = partial(nn.BatchNorm2d, eps=0.001, momentum=0.03)
 CBM = partial(Conv2dNormActivation, bias=False, inplace=True, norm_layer=BN, activation_layer=nn.Mish)
@@ -34,8 +34,6 @@ class WrapLayer(nn.Module):
         for _ in range(count):
             self.make_layers.append(ResidualLayer(c_, c_, shortcut))
 
-        self.conv1 = CBM(c_, c_, 1)
-
         self.trans_cat = CBM(c_ * 2, c2, 1)
 
     def forward(self, x):
@@ -46,7 +44,6 @@ class WrapLayer(nn.Module):
         for conv in self.make_layers:
             out0 = conv(out0)
 
-        out0 = self.conv1(out0)
         out = torch.cat([out0, out1], 1)
         out = self.trans_cat(out)
         return out
@@ -129,13 +126,13 @@ class CSPDarknetV2(nn.Module):
         # -----------------------------------------------#
 
         CBM.keywords['activation_layer'] = nn.SiLU
-        DownSampleLayer = partial(CBM, kernel_size=3, stride=2)
+        DownSampleLayer = partial(CBM, kernel_size=3, stride=2, inplace=False)
 
         # -----------------------------------------------#
         #   利用focus网络结构进行特征提取
         #   640, 640, 3 -> 320, 320, 12 -> 320, 320, 64
         # -----------------------------------------------#
-        self.stem = Focus(3, base_channels, k=3)
+        self.stem = CBM(3, 16, 6, 2)
         # -----------------------------------------------#
         #   完成卷积之后，320, 320, 64 -> 160, 160, 128
         #   完成CSPlayer之后，160, 160, 128 -> 160, 160, 128
@@ -150,7 +147,7 @@ class CSPDarknetV2(nn.Module):
         # -----------------------------------------------#
         self.crossStagePartial2 = nn.Sequential(
             DownSampleLayer(base_channels * 2, base_channels * 4),
-            WrapLayer(base_channels * 4, base_channels * 4, base_depth * 3),
+            WrapLayer(base_channels * 4, base_channels * 4, base_depth * 2),
         )
 
         # -----------------------------------------------#
@@ -168,10 +165,8 @@ class CSPDarknetV2(nn.Module):
         # -----------------------------------------------#
         self.crossStagePartial4 = nn.Sequential(
             DownSampleLayer(base_channels * 8, base_channels * 16),
-            CBM(base_channels * 16, base_channels * 8, 1),
-            SPP([5, 9, 3]),
-            CBM(base_channels * 8 * 4, base_channels * 16, 1),
-            WrapLayer(base_channels * 16, base_channels * 16, base_depth, shortcut=False),
+            WrapLayer(base_channels * 16, base_channels * 16, base_depth),
+            SPPF(base_channels * 16, base_channels * 16, [5]),
         )
 
         self.reset_parameters()
