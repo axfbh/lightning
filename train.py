@@ -15,7 +15,7 @@ from ops.utils.callbacks import PlotLogger, WarmupLR
 
 import lightning as L
 from lightning.pytorch.strategies import DDPStrategy
-from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.loggers import TensorBoardLogger, CSVLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.callbacks import GradientAccumulationScheduler
 
@@ -46,7 +46,7 @@ def parse_opt():
                         default="Cosine",
                         help="scheduler")
     parser.add_argument("--sync-bn", action="store_true", help="use SyncBatchNorm, only available in DDP mode")
-    parser.add_argument("--workers", type=int, default=3, help="max dataloader workers (per RANK in DDP mode)")
+    parser.add_argument("--workers", type=int, default=2, help="max dataloader workers (per RANK in DDP mode)")
     parser.add_argument("--project", default="./runs", help="save to project/name")
     parser.add_argument("--name", default="train", help="save to project/name")
     parser.add_argument("--label-smoothing", type=float, default=0.0, help="Label smoothing epsilon")
@@ -62,17 +62,18 @@ def setup(opt, hyp):
     batch_size = opt.batch_size
     nbs = 64  # nominal batch size
     accumulate = max(round(nbs / batch_size), 1)
-    warmup_epochs = hyp["warmup_epochs"] + 1
 
-    accumulator_callback = GradientAccumulationScheduler(scheduling={0: 1, warmup_epochs: accumulate})
+    accumulator_callback = GradientAccumulationScheduler(scheduling={0: 1, (hyp["warmup_epoch"] + 1): accumulate})
 
     tb_logger = TensorBoardLogger(save_dir=opt.project, name=opt.name)
+
+    # cvs_logger = CSVLogger(save_dir=opt.project, name=opt.name, version=tb_logger.version, flush_logs_every_n_steps=1)
 
     ddp = DDPStrategy(process_group_backend="nccl" if torch.distributed.is_nccl_available() else 'gloo')
 
     warmup_callback = WarmupLR(momentum=hyp['momentum'],
                                warmup_bias_lr=hyp['warmup_bias_lr'],
-                               warmup_epoch=warmup_epochs,
+                               warmup_epoch=hyp["warmup_epoch"],
                                warmup_momentum=hyp['warmup_momentum'])
 
     bar_callback = DetectProgressBar()

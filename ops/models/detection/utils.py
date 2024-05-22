@@ -1,6 +1,6 @@
 from typing import Any
 import torch
-
+import math
 from ops.metric.DetectionMetric import MeanAveragePrecision
 from ops.utils.torch_utils import ModelEMA, smart_optimizer, smart_scheduler
 
@@ -14,11 +14,9 @@ class Yolo(LightningModule):
 
         images = images / 255.
 
-        image_size = torch.as_tensor(shape, device=self.device)
-
         preds = self(images)
 
-        loss, loss_items = self.compute_loss(preds, targets, image_size)
+        loss, loss_items = self.compute_loss(preds, targets, shape)
 
         self.log_dict({'box_loss': loss_items[0],
                        'obj_loss': loss_items[1],
@@ -32,11 +30,9 @@ class Yolo(LightningModule):
 
         images = images / 255.
 
-        image_size = torch.as_tensor(shape, device=self.device)
-
         preds, train_out = self.ema_model(images)
 
-        loss = self.compute_loss(train_out, targets, image_size)[1]  # box, obj, cls
+        loss = self.compute_loss(train_out, targets, shape)[1]  # box, obj, cls
 
         if not self.trainer.sanity_checking:
             self.map_metric.update(preds, targets)
@@ -72,10 +68,12 @@ class Yolo(LightningModule):
                                     self.hyp['momentum'],
                                     self.hyp['weight_decay'])
 
-        scheduler = smart_scheduler(optimizer,
-                                    self.sche,
-                                    self.current_epoch - 1,
-                                    T_max=self.trainer.max_epochs)
+        scheduler = smart_scheduler(
+            optimizer,
+            self.sche,
+            self.current_epoch - 1,
+            T_max=self.trainer.max_epochs
+        )
 
         self.ema_model = ModelEMA(self)
 

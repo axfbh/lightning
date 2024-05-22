@@ -36,7 +36,7 @@ class WrapLayer(nn.Module):
 
         self.conv1 = CBM(c_, c_, 1)
 
-        self.trans_cat = CBM(c1 * 2 if first else c1, c2, 1)
+        self.trans_cat = CBM(c_ * 2, c2, 1)
 
     def forward(self, x):
         # ----------- 两分支 -----------

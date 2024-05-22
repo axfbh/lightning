@@ -18,6 +18,7 @@ import torch.distributed as dist
 from ops.utils.logging import colorstr
 from lightning import Callback
 from lightning.fabric.utilities.rank_zero import rank_zero_info
+from torch.optim.lr_scheduler import LRScheduler
 
 
 @torch.no_grad()
@@ -70,6 +71,11 @@ def smart_optimizer(model, name: str = "Adam", lr=0.001, momentum=0.9, decay=1e-
     return optimizer
 
 
+def one_cycle(lrf, max_epochs):
+    # lambda function for sinusoidal ramp from y1 to y2 https://arxiv.org/pdf/1812.01187.pdf
+    return lambda x: ((1 - math.cos(x * math.pi / max_epochs)) / 2) * (lrf - 1) + 1
+
+
 def smart_scheduler(optimizer, name: str = "Cosine", last_epoch=1, **kwargs):
     if name == "Cosine":
         # T_max: 整个训练过程中的cosine循环次数
@@ -85,13 +91,12 @@ def smart_scheduler(optimizer, name: str = "Cosine", last_epoch=1, **kwargs):
         scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer,
                                                           last_epoch=last_epoch,
                                                           **kwargs)
-    elif name == "OneCycleLR":
-        # max_lr (float or list) – Upper learning rate boundaries in the cycle for each parameter group.
-        # anneal_strategy (str) – {‘cos’, ‘linear’} Specifies the annealing strategy: “cos” for cosine annealing,
-        # “linear” for linear annealing. Default: ‘cos’
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer,
-                                                        last_epoch=last_epoch,
-                                                        **kwargs)
+    elif name == 'OneCycleLR':
+        fn = one_cycle(**kwargs)
+        scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer,
+                                                              last_epoch=last_epoch,
+                                                              lr_lambda=fn)
+
     else:
         raise NotImplementedError(f"Optimizer {name} not implemented.")
 

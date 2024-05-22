@@ -53,19 +53,16 @@ class WarmupLR(Callback):
         self.warmup_epoch = warmup_epoch
         self.momentum = momentum
 
-    def on_train_batch_start(self,
-                             trainer: "pl.Trainer",
-                             pl_module: "pl.LightningModule",
-                             batch: Any,
-                             batch_idx: int) -> None:
+    def on_before_optimizer_step(
+            self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", optimizer
+    ) -> None:
         ni = trainer.global_step
-        warmup_iter = self.warmup_epoch * (trainer.num_training_batches + 1)
+        warmup_iter = max(self.warmup_epoch * trainer.num_training_batches, 100)
         if ni <= warmup_iter:
             xi = [0, warmup_iter]  # x interp
             for i, optimizer in enumerate(trainer.optimizers):
                 for j, x in enumerate(optimizer.param_groups):
                     new_lr = trainer.lr_scheduler_configs[i].scheduler._get_closed_form_lr()[j]
-                    # new_lr = 0.01
                     x["lr"] = np.interp(
                         ni,
                         xi,
