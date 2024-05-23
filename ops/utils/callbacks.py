@@ -60,22 +60,20 @@ class WarmupLR(Callback):
         warmup_iter = max(self.warmup_epoch * trainer.num_training_batches, 100)
         if ni <= warmup_iter:
             xi = [0, warmup_iter]  # x interp
-            for i, optimizer in enumerate(trainer.optimizers):
-                for j, x in enumerate(optimizer.param_groups):
-                    # new_lr = trainer.lr_scheduler_configs[i].scheduler._get_closed_form_lr()[j]
-                    new_lr = x['initial_lr'] * trainer.lr_scheduler_configs[i].scheduler.lr_lambdas[j](
-                        trainer.current_epoch)
-                    x["lr"] = np.interp(
+            for j, x in enumerate(optimizer.param_groups):
+                # new_lr = trainer.lr_scheduler_configs[i].scheduler._get_closed_form_lr()[j]
+                lf = pl_module.lr_schedulers().lr_lambdas[j]
+                x["lr"] = np.interp(
+                    ni,
+                    xi,
+                    [self.warmup_bias_lr if j == 0 else 0.0, x['initial_lr'] * lf(trainer.current_epoch)]
+                )
+                if "momentum" in x:
+                    x["momentum"] = np.interp(
                         ni,
                         xi,
-                        [self.warmup_bias_lr if j == 0 else 0.0, new_lr]
+                        [self.warmup_momentum, self.momentum]
                     )
-                    if "momentum" in x:
-                        x["momentum"] = np.interp(
-                            ni,
-                            xi,
-                            [self.warmup_momentum, self.momentum]
-                        )
 
 
 TQDM_BAR_FORMAT = "{l_bar}{bar:10}{r_bar}"  # tqdm bar format
@@ -161,12 +159,12 @@ class TQDMProgressBar(tqdm_progress.TQDMProgressBar):
         if self._should_update(n, self.train_progress_bar.total):  # rank 0 更新 bar
             _update_n(self.train_progress_bar, n)
             mem = f"{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G"  # (GB)
-            lr = trainer.optimizers[0].param_groups[0]['lr']
+            lr = pl_module.optimizers().optimizer.param_groups[0]['lr']
             desc = ("%11i" + "%11s" + "%11.4g") % (trainer.current_epoch, mem, lr) + self.get_description(trainer,
                                                                                                           pl_module)
             self.train_progress_bar.set_description(desc)
 
-        if n == self.train_progress_bar.total:
+        if self.trainer.is_last_batch:
             self.train_progress_bar.close()
 
     def on_train_end(self, *_: Any) -> None:

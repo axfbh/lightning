@@ -1,6 +1,8 @@
 from typing import Any
-import torch
 import math
+import numpy as np
+import torch
+from torch import Tensor
 from ops.metric.DetectionMetric import MeanAveragePrecision
 from ops.utils.torch_utils import ModelEMA, smart_optimizer, smart_scheduler
 
@@ -67,13 +69,6 @@ class Yolo(LightningModule):
                                     self.hyp['lr'],
                                     self.hyp['momentum'],
                                     self.hyp['weight_decay'])
-
-        # scheduler = smart_scheduler(
-        #     optimizer,
-        #     self.sche,
-        #     self.current_epoch - 1,
-        #     T_max=self.trainer.max_epochs
-        # )
 
         scheduler = smart_scheduler(
             optimizer,
