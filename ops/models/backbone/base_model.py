@@ -1,12 +1,14 @@
+from typing import Any
+
+import numpy as np
 import torch.nn as nn
 import torch
+from lightning import LightningModule
+from lightning.pytorch.utilities.types import STEP_OUTPUT
 
 
-class BasicModel(nn.Module):
+class BasicModel(LightningModule):
     def __init__(self):
-        super(BasicModel, self).__init__()
-
-
-    def activations_hook(self, grad):
-        # 获取梯度的钩子
-        self.gradients = grad
+        super().__init__()
+        # Important: This property activates manual optimization.
+        # self.automatic_optimization = False

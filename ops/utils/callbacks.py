@@ -15,6 +15,7 @@ from lightning.fabric.utilities.rank_zero import rank_zero_only
 from lightning.pytorch.utilities.types import STEP_OUTPUT
 from lightning.pytorch.callbacks.progress.tqdm_progress import _update_n, convert_inf, Tqdm
 from lightning.pytorch.callbacks.progress import tqdm_progress
+from torch.optim import Optimizer
 
 
 class PlotLogger(Callback):
@@ -44,29 +45,34 @@ class PlotLogger(Callback):
 
 class WarmupLR(Callback):
     def __init__(self,
+                 nbs: int,
                  momentum: float,
                  warmup_epoch: int,
                  warmup_bias_lr: float,
                  warmup_momentum: float):
+        self.nbs = nbs
         self.warmup_momentum = warmup_momentum
         self.warmup_bias_lr = warmup_bias_lr
         self.warmup_epoch = warmup_epoch
         self.momentum = momentum
 
-    def on_before_optimizer_step(
-            self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", optimizer
+    def on_train_batch_start(
+            self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", batch: Any, batch_idx: int
     ) -> None:
-        ni = trainer.global_step
-        warmup_iter = max(self.warmup_epoch * trainer.num_training_batches, 100)
-        if ni <= warmup_iter:
-            xi = [0, warmup_iter]  # x interp
-            for j, x in enumerate(optimizer.param_groups):
-                # new_lr = trainer.lr_scheduler_configs[i].scheduler._get_closed_form_lr()[j]
-                lf = pl_module.lr_schedulers().lr_lambdas[j]
+        opt = pl_module.optimizers()
+        sch = pl_module.lr_schedulers()
+        ni = pl_module.global_step
+        nw = trainer.num_training_batches * self.warmup_epoch
+        batch_size = trainer.train_dataloader.batch_size
+        if ni <= nw:
+            xi = [0, nw]  # x interp
+            trainer.accumulate_grad_batches = max(1, np.interp(ni, xi, [1, self.nbs / batch_size]).round())
+            for j, x in enumerate(opt.param_groups):
+                lf = sch.lr_lambdas[j]
                 x["lr"] = np.interp(
                     ni,
                     xi,
-                    [self.warmup_bias_lr if j == 0 else 0.0, x['initial_lr'] * lf(trainer.current_epoch)]
+                    [self.warmup_bias_lr if j == 0 else 0.0, x["initial_lr"] * lf(pl_module.current_epoch)]
                 )
                 if "momentum" in x:
                     x["momentum"] = np.interp(
@@ -76,10 +82,8 @@ class WarmupLR(Callback):
                     )
 
 
-TQDM_BAR_FORMAT = "{l_bar}{bar:10}{r_bar}"  # tqdm bar format
-
-
 class TQDMProgressBar(tqdm_progress.TQDMProgressBar):
+    TQDM_BAR_FORMAT = "{l_bar}{bar:10}{r_bar}"  # tqdm bar format
 
     def init_sanity_tqdm(self) -> Tqdm:
         """Override this to customize the tqdm bar for the validation sanity run."""
@@ -90,7 +94,7 @@ class TQDMProgressBar(tqdm_progress.TQDMProgressBar):
             leave=False,
             dynamic_ncols=True,
             file=sys.stderr,
-            bar_format=TQDM_BAR_FORMAT,
+            bar_format=self.TQDM_BAR_FORMAT,
         )
 
     def init_train_tqdm(self) -> Tqdm:
@@ -102,7 +106,7 @@ class TQDMProgressBar(tqdm_progress.TQDMProgressBar):
             leave=True,
             dynamic_ncols=True,
             file=sys.stderr,
-            bar_format=TQDM_BAR_FORMAT,
+            bar_format=self.TQDM_BAR_FORMAT,
         )
 
     def init_validation_tqdm(self) -> Tqdm:
@@ -115,7 +119,7 @@ class TQDMProgressBar(tqdm_progress.TQDMProgressBar):
             leave=True,
             dynamic_ncols=True,
             file=sys.stderr,
-            bar_format=TQDM_BAR_FORMAT,
+            bar_format=self.TQDM_BAR_FORMAT,
         )
 
     def get_description(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> str:
@@ -151,11 +155,10 @@ class TQDMProgressBar(tqdm_progress.TQDMProgressBar):
         self.train_progress_bar.reset(convert_inf(self.total_train_batches))
         self.train_progress_bar.initial = 0
 
-    def on_train_batch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", outputs: STEP_OUTPUT,
-                           batch: Any,
-                           batch_idx: int
-                           ) -> None:
-        n = batch_idx + 1
+    def on_before_optimizer_step(
+            self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", optimizer: Optimizer
+    ) -> None:
+        n = trainer._active_loop.batch_idx + 1
         if self._should_update(n, self.train_progress_bar.total):  # rank 0 更新 bar
             _update_n(self.train_progress_bar, n)
             mem = f"{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G"  # (GB)
@@ -166,6 +169,15 @@ class TQDMProgressBar(tqdm_progress.TQDMProgressBar):
 
         if self.trainer.is_last_batch:
             self.train_progress_bar.close()
+
+    def on_train_batch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", outputs: STEP_OUTPUT,
+                           batch: Any,
+                           batch_idx: int
+                           ) -> None:
+        pass
+
+    def on_train_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
+        pass
 
     def on_train_end(self, *_: Any) -> None:
         pass

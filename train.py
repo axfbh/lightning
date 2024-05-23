@@ -9,16 +9,14 @@ import torch.distributed
 from dataloader import create_dataloader
 
 from ops.models.detection import YoloV5, YoloV4, YoloV7
-# from models.tmp import YoloV5
 from ops.utils import extract_ip
 from ops.utils.logging import print_args, colorstr
 from ops.utils.callbacks import PlotLogger, WarmupLR
 
 import lightning as L
 from lightning.pytorch.strategies import DDPStrategy
-from lightning.pytorch.loggers import TensorBoardLogger, CSVLogger
+from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.callbacks import GradientAccumulationScheduler
 
 from utils.callbacks import DetectProgressBar
 from lightning.fabric.utilities.rank_zero import rank_zero_info
@@ -28,7 +26,8 @@ def parse_opt():
     parser = argparse.ArgumentParser()
 
     # -------------- 参数文件 --------------
-    parser.add_argument("--weights", default='./runs/train/version_1/checkpoints/last.pt', help="resume most recent training")
+    parser.add_argument("--weights", default='./runs/train/version_1/checkpoints/last.pt',
+                        help="resume most recent training")
     parser.add_argument("--cfg", type=str, default="./models/yolo-v4-v5-n.yaml", help="models.yaml path")
     parser.add_argument("--data", type=str, default="./data/voc.yaml", help="dataset.yaml path")
     parser.add_argument("--hyp", type=str, default="./data/hyp/hyp-yolo-v5-low.yaml", help="hyperparameters path")
@@ -64,13 +63,12 @@ def setup(opt, hyp):
     nbs = 64  # nominal batch size
     accumulate = max(round(nbs / batch_size), 1)
 
-    accumulator_callback = GradientAccumulationScheduler(scheduling={0: 1, (hyp["warmup_epoch"] + 2): accumulate})
-
     tb_logger = TensorBoardLogger(save_dir=opt.project, name=opt.name)
 
     ddp = DDPStrategy(process_group_backend="nccl" if torch.distributed.is_nccl_available() else 'gloo')
 
-    warmup_callback = WarmupLR(momentum=hyp['momentum'],
+    warmup_callback = WarmupLR(nbs=nbs,
+                               momentum=hyp['momentum'],
                                warmup_bias_lr=hyp['warmup_bias_lr'],
                                warmup_epoch=hyp["warmup_epoch"],
                                warmup_momentum=hyp['warmup_momentum'])
@@ -93,13 +91,13 @@ def setup(opt, hyp):
                         logger=tb_logger,
                         max_epochs=opt.epochs,
                         strategy=ddp,
+                        accumulate_grad_batches=accumulate,
                         gradient_clip_val=10.0,
                         # clip gradients' global norm to <=10.0 using gradient_clip_algorithm='norm'
                         gradient_clip_algorithm="norm",
                         num_sanity_val_steps=1,
                         log_every_n_steps=1,
                         callbacks=[
-                            accumulator_callback,
                             warmup_callback,
                             bar_callback,
                             plt_callback,
