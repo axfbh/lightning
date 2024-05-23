@@ -8,8 +8,8 @@ import torch.distributed
 
 from dataloader import create_dataloader
 
-# from ops.models.detection import YoloV5, YoloV4, YoloV7
-from models.tmp import YoloV5
+from ops.models.detection import YoloV5, YoloV4, YoloV7
+# from models.tmp import YoloV5
 from ops.utils import extract_ip
 from ops.utils.logging import print_args, colorstr
 from ops.utils.callbacks import PlotLogger, WarmupLR
@@ -67,8 +67,6 @@ def setup(opt, hyp):
     accumulator_callback = GradientAccumulationScheduler(scheduling={0: 1, (hyp["warmup_epoch"] + 2): accumulate})
 
     tb_logger = TensorBoardLogger(save_dir=opt.project, name=opt.name)
-
-    # cvs_logger = CSVLogger(save_dir=opt.project, name=opt.name, version=tb_logger.version, flush_logs_every_n_steps=1)
 
     ddp = DDPStrategy(process_group_backend="nccl" if torch.distributed.is_nccl_available() else 'gloo')
 
@@ -128,7 +126,7 @@ def main(opt):
 
     m = model.head  # detection head models
     nl = m.nl  # number of detection layers (to scale hyp)
-    nc = m.num_classes
+    nc = m.nc
     hyp["box"] *= 3 / nl  # scale to layers
     hyp["cls"] *= nc / 80 * 3 / nl  # scale to classes and layers
     hyp["obj"] *= (max(opt.image_size[0], opt.image_size[1]) / 640) ** 2 * 3 / nl  # scale to image size and layers

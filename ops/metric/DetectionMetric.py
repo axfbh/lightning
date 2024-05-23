@@ -189,7 +189,11 @@ class MeanAveragePrecision:
         self.single_cls = single_cls
 
     def update(self, preds, targets):
-        preds = non_max_suppression(preds, self.conf_thres, self.iou_thres, self.max_det)
+        preds = non_max_suppression(preds, self.conf_thres, self.iou_thres,
+                                    labels=[],
+                                    max_det=self.max_det,
+                                    multi_label=True,
+                                    agnostic=False)
         for si, pred in enumerate(preds):
             labels = targets[targets[:, 0] == si, 1:]
             labels[:, 0] = labels[:, 0] - 1

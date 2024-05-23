@@ -203,7 +203,7 @@ class YoloV5Head(nn.Module):
         super(YoloV5Head, self).__init__()
         self.nl = len(anchors)
         self.na = len(anchors[0]) // 2
-        self.num_classes = num_classes
+        self.nc = num_classes
         self.no = num_classes + 5
         self.head = nn.ModuleList()
         for in_channels in in_channels_list:
@@ -219,7 +219,7 @@ class YoloV5Head(nn.Module):
             if isinstance(layer, nn.Conv2d):
                 b = layer.bias.view(self.na, -1)
                 b.data[:, 4] += math.log(8 / (640 / s) ** 2)
-                b.data[:, 5:5 + self.num_classes] += math.log(0.6 / (self.num_classes - 0.99999))
+                b.data[:, 5:5 + self.nc] += math.log(0.6 / (self.nc - 0.99999))
                 layer.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
 
     def forward(self, x: List, H, W):
@@ -238,7 +238,7 @@ class YoloV5Head(nn.Module):
                 grid = make_grid(ny, nx, 1, 1, self.anchors.dtype, device).view((1, 1, ny, nx, 2)).expand(shape)
                 anchor_grid = self.anchors[i].view((1, self.na, 1, 1, 2)).expand(shape)
 
-                xy, wh, conf = x[i].sigmoid().split((2, 2, self.num_classes + 1), -1)
+                xy, wh, conf = x[i].sigmoid().split((2, 2, self.nc + 1), -1)
                 xy = (xy * 2 - 0.5 + grid) * stride  # xy
                 wh = (wh * 2) ** 2 * anchor_grid  # wh
                 y = torch.cat((xy, wh, conf), 4)

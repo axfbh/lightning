@@ -19,7 +19,7 @@ class YoloLoss(BasicLoss):
         self.anchors = m.anchors
         self.nl = m.nl
         self.na = m.na
-        self.num_classes = m.num_classes
+        self.nc = m.nc
 
         self.balance = [4.0, 1.0, 0.4]
 
@@ -124,7 +124,7 @@ class YoloLossV3(YoloLoss):
                 lwh += MSE(ptwh, twh[i])
 
                 # ------------ 计算 分类 loss ------------
-                if self.num_classes > 1:
+                if self.nc > 1:
                     t = torch.zeros_like(ps[:, 5:])  # targets
                     t[range(nb), tcls[i] - 1] = 1
                     lcls += self.BCEcls(ps[:, 5:], t)
@@ -231,7 +231,7 @@ class YoloLossV4(YoloLoss):
 
                 lbox += (1.0 - giou).mean()
 
-                if self.num_classes > 1:
+                if self.nc > 1:
                     t = torch.full_like(ps[:, 5:], self.cn)  # targets
                     t[range(nb), tcls[i] - 1] = self.cp
                     lcls += self.BCEcls(ps[:, 5:], t)
@@ -373,7 +373,7 @@ class YoloLossV5(YoloLoss):
                 iou = iou.detach().clamp(0).type(tobj.dtype)
                 tobj[b, a, gj, gi] = iou  # iou ratio
 
-                if self.num_classes > 1:
+                if self.nc > 1:
                     t = torch.full_like(ps[:, 5:], self.cn)  # targets
                     t[range(nb), tcls[i] - 1] = self.cp
                     lcls += self.BCEcls(ps[:, 5:], t)
@@ -507,7 +507,7 @@ class YoloLossV7(YoloLoss):
                 iou = iou.detach().clamp(0).type(tobj.dtype)
                 tobj[b, a, gj, gi] = iou  # iou ratio
 
-                if self.num_classes > 1:
+                if self.nc > 1:
                     t = torch.full_like(ps[:, 5:], self.cn)  # targets
                     t[range(nb), tcls[i] - 1] = self.cp
                     lcls += self.BCEcls(ps[:, 5:], t)
