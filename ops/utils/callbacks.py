@@ -62,7 +62,9 @@ class WarmupLR(Callback):
             xi = [0, warmup_iter]  # x interp
             for i, optimizer in enumerate(trainer.optimizers):
                 for j, x in enumerate(optimizer.param_groups):
-                    new_lr = trainer.lr_scheduler_configs[i].scheduler._get_closed_form_lr()[j]
+                    # new_lr = trainer.lr_scheduler_configs[i].scheduler._get_closed_form_lr()[j]
+                    new_lr = x['initial_lr'] * trainer.lr_scheduler_configs[i].scheduler.lr_lambdas[j](
+                        trainer.current_epoch)
                     x["lr"] = np.interp(
                         ni,
                         xi,

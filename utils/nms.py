@@ -5,18 +5,18 @@ import torchvision
 torch.set_printoptions(precision=4, sci_mode=False)
 
 
-def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, max_nms=300):
+def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, max_det=300):
     """
     Performs  Non-Maximum Suppression on inference results
     Returns detections with shape:
         nx6 (x1, y1, x2, y2, conf, cls)
     """
 
-    min_wh, max_wh = 2, 4096  # (pixels) minimum and maximum box width and height
+    min_wh, max_wh = 2, 7680  # (pixels) minimum and maximum box width and height
 
-    max_nms = max_nms
+    max_nms = 30000
 
-    method = 'merge'  #
+    method = False  #
 
     output = [torch.zeros((0, 6), device=prediction.device)] * len(prediction)
 
@@ -52,6 +52,7 @@ def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, max_nms=300):
 
         # Each index value correspond to a category
         i = torchvision.ops.batched_nms(boxes, scores, j.squeeze(1), iou_thres)
+        i = i[:max_det]  # limit detections
         if method == 'merge' and 1 < n < 3E3:  # Merge NMS (boxes merged using weighted mean)
             # 目标个数 < 矩阵运算接受最大 长宽
             iou = bbox_iou(boxes[i], boxes) > iou_thres

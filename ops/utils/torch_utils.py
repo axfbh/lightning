@@ -76,6 +76,10 @@ def one_cycle(lrf, max_epochs):
     return lambda x: ((1 - math.cos(x * math.pi / max_epochs)) / 2) * (lrf - 1) + 1
 
 
+def one_linear(lrf, max_epochs):
+    return lambda x: (1 - x / max_epochs) * (1.0 - lrf) + lrf
+
+
 def smart_scheduler(optimizer, name: str = "Cosine", last_epoch=1, **kwargs):
     if name == "Cosine":
         # T_max: 整个训练过程中的cosine循环次数
@@ -91,11 +95,11 @@ def smart_scheduler(optimizer, name: str = "Cosine", last_epoch=1, **kwargs):
         scheduler = torch.optim.lr_scheduler.PolynomialLR(optimizer,
                                                           last_epoch=last_epoch,
                                                           **kwargs)
-    elif name == 'OneCycleLR':
-        fn = one_cycle(**kwargs)
-        scheduler = torch.optim.lr_scheduler.MultiplicativeLR(optimizer,
-                                                              last_epoch=last_epoch,
-                                                              lr_lambda=fn)
+    elif name == 'OneLinearLR':
+        fn = one_linear(**kwargs)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer,
+                                                      last_epoch=last_epoch,
+                                                      lr_lambda=fn)
 
     else:
         raise NotImplementedError(f"Optimizer {name} not implemented.")

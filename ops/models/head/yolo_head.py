@@ -27,7 +27,7 @@ class YoloV7Head(nn.Module):
             if isinstance(layer, nn.Conv2d):
                 b = layer.bias.view(self.na, -1)
                 b.data[:, 4] += math.log(8 / (640 / s) ** 2)
-                b.data[:, 5:self.num_classes] += math.log(0.6 / (self.num_classes - 0.99999))
+                b.data[:, 5:5 + self.num_classes] += math.log(0.6 / (self.num_classes - 0.99999))
                 layer.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
 
     def forward(self, x: List, H, W):
@@ -77,7 +77,7 @@ class YoloV5Head(nn.Module):
             if isinstance(layer, nn.Conv2d):
                 b = layer.bias.view(self.na, -1)
                 b.data[:, 4] += math.log(8 / (640 / s) ** 2)
-                b.data[:, 5:self.num_classes] += math.log(0.6 / (self.num_classes - 0.99999))
+                b.data[:, 5:5 + self.num_classes] += math.log(0.6 / (self.num_classes - 0.99999))
                 layer.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
 
     def forward(self, x: List, H, W):
@@ -127,7 +127,7 @@ class YoloV4Head(nn.Module):
             if isinstance(layer, nn.Conv2d):
                 b = layer.bias.view(self.na, -1)
                 b.data[:, 4] += math.log(8 / (416 / s) ** 2)
-                b.data[:, 5:self.num_classes] += math.log(0.6 / (self.num_classes - 0.99999))
+                b.data[:, 5:5 + self.num_classes] += math.log(0.6 / (self.num_classes - 0.99999))
                 layer.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
 
     def forward(self, x: List, H, W):

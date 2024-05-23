@@ -8,7 +8,8 @@ import torch.distributed
 
 from dataloader import create_dataloader
 
-from ops.models.detection import YoloV5, YoloV4, YoloV7
+# from ops.models.detection import YoloV5, YoloV4, YoloV7
+from models.tmp import YoloV5
 from ops.utils import extract_ip
 from ops.utils.logging import print_args, colorstr
 from ops.utils.callbacks import PlotLogger, WarmupLR
@@ -27,7 +28,7 @@ def parse_opt():
     parser = argparse.ArgumentParser()
 
     # -------------- 参数文件 --------------
-    parser.add_argument("--weights", default='./runs/train/version_8/checkpoints/last.pt', help="resume most recent training")
+    parser.add_argument("--weights", default='./runs/train/version_1/checkpoints/last.pt', help="resume most recent training")
     parser.add_argument("--cfg", type=str, default="./models/yolo-v4-v5-n.yaml", help="models.yaml path")
     parser.add_argument("--data", type=str, default="./data/voc.yaml", help="dataset.yaml path")
     parser.add_argument("--hyp", type=str, default="./data/hyp/hyp-yolo-v5-low.yaml", help="hyperparameters path")
@@ -36,14 +37,14 @@ def parse_opt():
     parser.add_argument("--epochs", type=int, default=300, help="total training epochs")
     parser.add_argument("--batch-size", type=int, default=16, help="total batch size for all GPUs")
     parser.add_argument("--image-size", type=list, default=[640, 640], help="train, val image size (pixels)")
-    parser.add_argument("--resume", nargs="?", const=True, default=True, help="resume most recent training")
+    parser.add_argument("--resume", nargs="?", const=True, default=False, help="resume most recent training")
     parser.add_argument("--device", default="gpu", help="cuda device, i.e. 0 or 0,1,2,3 or cpu")
     parser.add_argument("--single-cls", action="store_true", help="train multi-class data as single-class")
     parser.add_argument("--optimizer", type=str, choices=["SGD", "Adam", "AdamW"],
                         default="SGD",
                         help="optimizer")
-    parser.add_argument("--scheduler", type=str, choices=["Cosine", "MultiStep", "Polynomial", "OneCycleLR"],
-                        default="Cosine",
+    parser.add_argument("--scheduler", type=str, choices=["Cosine", "MultiStep", "Polynomial", "OneLinearLR"],
+                        default="OneLinearLR",
                         help="scheduler")
     parser.add_argument("--sync-bn", action="store_true", help="use SyncBatchNorm, only available in DDP mode")
     parser.add_argument("--workers", type=int, default=2, help="max dataloader workers (per RANK in DDP mode)")
@@ -63,7 +64,7 @@ def setup(opt, hyp):
     nbs = 64  # nominal batch size
     accumulate = max(round(nbs / batch_size), 1)
 
-    accumulator_callback = GradientAccumulationScheduler(scheduling={0: 1, (hyp["warmup_epoch"] + 1): accumulate})
+    accumulator_callback = GradientAccumulationScheduler(scheduling={0: 1, (hyp["warmup_epoch"] + 2): accumulate})
 
     tb_logger = TensorBoardLogger(save_dir=opt.project, name=opt.name)
 

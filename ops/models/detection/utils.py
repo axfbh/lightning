@@ -25,6 +25,9 @@ class Yolo(LightningModule):
 
         return loss
 
+    def on_train_batch_end(self, outputs, batch: Any, batch_idx: int) -> None:
+        self.ema_model.update(self)
+
     def validation_step(self, batch, batch_idx):
         images, targets, shape = batch
 
@@ -55,9 +58,6 @@ class Yolo(LightningModule):
 
             self.map_metric.reset()
 
-    def on_train_batch_end(self, outputs, batch: Any, batch_idx: int) -> None:
-        self.ema_model.update(self)
-
     def configure_model(self) -> None:
         self.map_metric = MeanAveragePrecision(device=self.device, conf_thres=0.001, iou_thres=0.6, max_det=300)
 
@@ -68,11 +68,19 @@ class Yolo(LightningModule):
                                     self.hyp['momentum'],
                                     self.hyp['weight_decay'])
 
+        # scheduler = smart_scheduler(
+        #     optimizer,
+        #     self.sche,
+        #     self.current_epoch - 1,
+        #     T_max=self.trainer.max_epochs
+        # )
+
         scheduler = smart_scheduler(
             optimizer,
             self.sche,
             self.current_epoch - 1,
-            T_max=self.trainer.max_epochs
+            lrf=self.hyp['lrf'],
+            max_epochs=self.trainer.max_epochs
         )
 
         self.ema_model = ModelEMA(self)

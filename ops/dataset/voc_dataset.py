@@ -37,7 +37,7 @@ class VOCDetection(Dataset):
             self.img_ids = [x[0] for x in img_ids_flag if x[1] != '-1']
 
     def __len__(self):
-        return len(self.img_ids)
+        return len(self.img_ids) - (2 * 16)
 
     def __annotations(self, img_id):
         anno = ET.parse(self._annopath % img_id).getroot()

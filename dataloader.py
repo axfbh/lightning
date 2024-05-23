@@ -143,42 +143,34 @@ class MyDataSet(VOCDetection):
     def __getitem__(self, item):
         image, bboxes, classes = super().__getitem__(item)
 
+        if self.augment:
+            augment_hsv(image, hgain=0.015, sgain=0.7, vgain=0.4)
+
         sample = self.resize(image=image, bboxes=bboxes, classes=classes)
+
+        # io.visualize(sample['image'], sample['bboxes'], classes, self.id2name)
 
         if self.augment:
             sample = self.transform(**sample)
 
-        bboxes = np.array(sample['bboxes'])
-        classes = np.array(sample['classes'])[:, None]
+        # bboxes = np.array(sample['bboxes'])
+        # classes = np.array(sample['classes'])[:, None]
+        #
+        # image, bboxes = random_perspective(image, np.concatenate([classes, bboxes], -1), 0, 0.1, 0.5, 0, 0)
+        # bboxes, classes = bboxes[:, 1:], classes[:, 0:1]
 
-        image, bboxes = random_perspective(image, np.concatenate([classes, bboxes], -1), 0, 0.1, 0.5, 0, 0)
-        bboxes, classes = bboxes[:, 1:], classes[:, 0:1]
-        augment_hsv(image, hgain=0.015, sgain=0.7, vgain=0.4)
-
-        bboxes = torch.FloatTensor(bboxes)
-        classes = torch.LongTensor(classes)
-        image = ToTensorV2()(image=image)['image'].float()
-
-        # io.visualize(sample['image'], sample['bboxes'], classes, self.id2name)
+        image = ToTensorV2()(image=sample['image'])['image'].float()
+        bboxes = torch.FloatTensor(sample['bboxes'])
+        classes = torch.LongTensor(sample['classes'])[:, None]
 
         nl = len(bboxes)
-
+        target = torch.zeros((nl, 6))
         if nl:
             gxy = (bboxes[:, 2:] + bboxes[:, :2]) * 0.5
             gwy = bboxes[:, 2:] - bboxes[:, :2]
-        else:
-            gxy = torch.zeros((nl, 2))
-            gwy = torch.zeros((nl, 2))
-            classes = torch.zeros((nl, 1))
-
-        indices = torch.zeros_like(classes)
-
-        target = torch.hstack([
-            indices,
-            classes,
-            gxy,
-            gwy
-        ])
+            target[:, 1:2] = classes
+            target[:, 2:4] = gxy
+            target[:, 4:6] = gwy
 
         return image, target
 
@@ -196,18 +188,18 @@ def create_dataloader(path,
                       persistent_workers=False,
                       seed=0):
     transform = A.Compose([
-        # A.Affine(scale={"x": (1 - hyp.scale, 1 + hyp.scale),
-        #                 "y": (1 - hyp.scale, 1 + hyp.scale)},
-        #          translate_percent={"x": (0.5 - hyp.translate, 0.5 + hyp.translate),
-        #                             "y": (0.5 - hyp.translate, 0.5 + hyp.translate)},
-        #          cval=114,
-        #          p=0.9),
+        A.Affine(scale={"x": (1 - hyp.scale, 1 + hyp.scale),
+                        "y": (1 - hyp.scale, 1 + hyp.scale)},
+                 translate_percent={"x": (0.5 - hyp.translate, 0.5 + hyp.translate),
+                                    "y": (0.5 - hyp.translate, 0.5 + hyp.translate)},
+                 cval=114,
+                 p=0.9),
         A.Blur(p=0.01),
         A.MedianBlur(p=0.01),
         A.ToGray(p=0.01),
         A.CLAHE(p=0.01),
-        # A.HueSaturationValue(p=0.9),
-        A.HorizontalFlip(p=hyp.fliplr),
+        A.HueSaturationValue(p=0.9),
+        # A.HorizontalFlip(p=hyp.fliplr),
         A.VerticalFlip(p=hyp.flipud),
     ], A.BboxParams(format='pascal_voc', label_fields=['classes']))
 
