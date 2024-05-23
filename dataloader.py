@@ -142,6 +142,7 @@ class MyDataSet(VOCDetection):
 
     def __getitem__(self, item):
         image, bboxes, classes = super().__getitem__(item)
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
         if self.augment:
             augment_hsv(image, hgain=0.015, sgain=0.7, vgain=0.4)
