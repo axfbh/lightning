@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 from torchvision.ops.boxes import box_iou
-from torchmetrics import Metric
 from utils.nms import non_max_suppression
 from torchvision.ops.boxes import box_convert
 
@@ -195,7 +194,7 @@ class MeanAveragePrecision:
                                     multi_label=False,
                                     agnostic=False)
         for si, pred in enumerate(preds):
-            labels = targets[targets[:, 0] == si, 1:]
+            labels = targets[targets[:, 0] == si, 1:].clone()
             labels[:, 0] = labels[:, 0] - 1
             nl, npr = labels.shape[0], pred.shape[0]  # number of labels, predictions
             correct = torch.zeros(npr, self.niou, dtype=torch.bool, device=self.device)  # init
@@ -226,6 +225,7 @@ class MeanAveragePrecision:
             ap50, ap = ap[:, 0], ap.mean(1)  # AP@0.5, AP@0.5:0.95
             mp, mr, map50, map = p.mean(), r.mean(), ap50.mean(), ap.mean()
         nt = np.bincount(stats[3].astype(int), minlength=20).sum()  # number of targets per class
+
         return self.seen, nt, mp, mr, map50, map
 
     def reset(self) -> None:
