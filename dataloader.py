@@ -149,7 +149,7 @@ class MyDataSet(VOCDetection):
             augment_hsv(image, hgain=0.015, sgain=0.7, vgain=0.4)
 
         sample = self.resize(image=image, bboxes=bboxes, classes=classes)
-        #
+
         # if self.augment and len(bboxes):
         #     image = sample['image']
         #     bboxes = np.array(sample['bboxes'])
@@ -193,6 +193,7 @@ def create_dataloader(path,
                       persistent_workers=False,
                       seed=0):
     transform = A.Compose([
+        A.Affine(translate_percent=(-0.5, -0.5), cval=(114, 114, 114), p=1.0),
         A.ShiftScaleRotate(rotate_limit=0,
                            scale_limit=(1 - hyp.scale, 1 + hyp.scale),
                            shift_limit=(0.5 - hyp.translate, 0.5 + hyp.translate),
