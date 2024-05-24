@@ -214,6 +214,8 @@ def create_dataloader(path,
     batch_size = min(batch_size, len(dataset))
     nd = torch.cuda.device_count()  # number of CUDA devices
     nw = min([os.cpu_count() // max(nd, 1), batch_size if batch_size > 1 else 0, workers])  # number of workers
+    generator = torch.Generator()
+    generator.manual_seed(6148914691236517205 + seed + rank)
 
     return DataLoader(dataset=dataset,
                       batch_size=batch_size,
@@ -222,4 +224,5 @@ def create_dataloader(path,
                       pin_memory=PIN_MEMORY,
                       collate_fn=detect_collate_fn,
                       worker_init_fn=seed_worker,
-                      persistent_workers=persistent_workers)
+                      persistent_workers=persistent_workers,
+                      generator=generator)
