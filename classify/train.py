@@ -65,7 +65,8 @@ def setup(opt, hyp):
 
     ddp = DDPStrategy(process_group_backend="nccl" if torch.distributed.is_nccl_available() else 'gloo')
 
-    warmup_callback = WarmupLR(momentum=hyp['momentum'],
+    warmup_callback = WarmupLR(nbs=nbs,
+                               momentum=hyp['momentum'],
                                warmup_bias_lr=hyp['warmup_bias_lr'],
                                warmup_epoch=hyp["warmup_epochs"],
                                warmup_momentum=hyp['warmup_momentum'])

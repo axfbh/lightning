@@ -61,8 +61,9 @@ class WarmupLR(Callback):
     ) -> None:
         opt = pl_module.optimizers()
         sch = pl_module.lr_schedulers()
-        ni = pl_module.global_step
-        nw = trainer.num_training_batches * self.warmup_epoch
+
+        ni = trainer._active_loop.batch_idx + trainer.num_training_batches * pl_module.current_epoch
+        nw = max(round(trainer.num_training_batches * self.warmup_epoch), 100)
         batch_size = trainer.train_dataloader.batch_size
         if ni <= nw:
             xi = [0, nw]  # x interp

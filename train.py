@@ -92,8 +92,8 @@ def setup(opt, hyp):
                         max_epochs=opt.epochs,
                         strategy=ddp,
                         accumulate_grad_batches=accumulate,
-                        gradient_clip_val=10.0,
                         # clip gradients' global norm to <=10.0 using gradient_clip_algorithm='norm'
+                        gradient_clip_val=10.0,
                         gradient_clip_algorithm="norm",
                         num_sanity_val_steps=1,
                         log_every_n_steps=1,
