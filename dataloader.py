@@ -164,7 +164,7 @@ class MyDataSet(VOCDetection):
         if self.augment:
             sample = self.transform(**sample)
 
-        io.visualize(sample['image'], sample['bboxes'], classes, self.id2name)
+        # io.visualize(sample['image'], sample['bboxes'], classes, self.id2name)
 
         image = ToTensorV2()(image=sample['image'])['image'].float()
         bboxes = torch.FloatTensor(sample['bboxes'])

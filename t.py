@@ -39,8 +39,8 @@ def shift_scale_rotate(shape=(640, 640), translate_x=(-0.1, 0.0629), translate_y
     C[1, 2] = -shape[0] / 2  # y translation (pixels)
     center = (-width / 2 - 0.5, -height / 2 - 0.5)
     matrix = cv2.getRotationMatrix2D(center, a, s)
-    matrix[0, 2] += random.uniform(*translate_x) * width  # x
-    matrix[1, 2] += random.uniform(*translate_y) * height  # y
+    # matrix[0, 2] += random.uniform(*translate_x) * width  # x
+    # matrix[1, 2] += random.uniform(*translate_y) * height  # y
     print(matrix)
 
 
