@@ -26,7 +26,7 @@ def parse_opt():
     parser = argparse.ArgumentParser()
 
     # -------------- 参数文件 --------------
-    parser.add_argument("--weights", default='./runs/train/version_0/checkpoints/last.pt',
+    parser.add_argument("--weights", default='./runs/train/version_1/checkpoints/last.pt',
                         help="resume most recent training")
     parser.add_argument("--cfg", type=str, default="./models/yolo-v4-v5-n.yaml", help="models.yaml path")
     parser.add_argument("--data", type=str, default="./data/voc.yaml", help="dataset.yaml path")

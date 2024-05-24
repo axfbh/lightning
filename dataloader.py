@@ -42,6 +42,7 @@ def box_candidates(box1, box2, wh_thr=2, ar_thr=100, area_thr=0.1, eps=1e-16):  
 def random_perspective(
         im, targets=(), degrees=10, translate=0.1, scale=0.1, shear=10, perspective=0.0, border=(0, 0)
 ):
+    import torchvision
     # torchvision.transforms.RandomAffine(degrees=(-10, 10), translate=(0.1, 0.1), scale=(0.9, 1.1), shear=(-10, 10))
     # targets = [cls, xyxy]
 
@@ -148,16 +149,16 @@ class MyDataSet(VOCDetection):
             augment_hsv(image, hgain=0.015, sgain=0.7, vgain=0.4)
 
         sample = self.resize(image=image, bboxes=bboxes, classes=classes)
-
-        if self.augment and len(bboxes):
-            image = sample['image']
-            bboxes = np.array(sample['bboxes'])
-            classes = np.array(sample['classes'])[:, None]
-            image, bboxes = random_perspective(image, np.concatenate([classes, bboxes], -1), 0, 0.1, 0.5, 0, 0)
-            bboxes, classes = bboxes[:, 1:], bboxes[:, 0]
-            sample['image'] = image
-            sample['bboxes'] = bboxes
-            sample['classes'] = classes
+        #
+        # if self.augment and len(bboxes):
+        #     image = sample['image']
+        #     bboxes = np.array(sample['bboxes'])
+        #     classes = np.array(sample['classes'])[:, None]
+        #     image, bboxes = random_perspective(image, np.concatenate([classes, bboxes], -1), 0, 0.1, 0.5, 0, 0)
+        #     bboxes, classes = bboxes[:, 1:], bboxes[:, 0]
+        #     sample['image'] = image
+        #     sample['bboxes'] = bboxes
+        #     sample['classes'] = classes
 
         # io.visualize(sample['image'], sample['bboxes'], classes, self.id2name)
 
@@ -192,6 +193,11 @@ def create_dataloader(path,
                       persistent_workers=False,
                       seed=0):
     transform = A.Compose([
+        A.ShiftScaleRotate(rotate_limit=0,
+                           scale_limit=(1 - hyp.scale, 1 + hyp.scale),
+                           shift_limit=(0.5 - hyp.translate, 0.5 + hyp.translate),
+                           border_mode=cv2.BORDER_CONSTANT,
+                           value=(114, 114, 114), p=1.0),
         A.Blur(p=0.01),
         A.MedianBlur(p=0.01),
         A.ToGray(p=0.01),
