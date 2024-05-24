@@ -194,9 +194,10 @@ def create_dataloader(path,
                       persistent_workers=False,
                       seed=0):
     transform = A.Compose([
+        A.Affine(translate_percent=(-0.5, -0.5), cval=(114, 114, 114), p=1.0),
         A.ShiftScaleRotate(rotate_limit=0,
                            scale_limit=(1 - hyp.scale, 1 + hyp.scale),
-                           shift_limit=(-0.1, 0.0629),
+                           shift_limit=(0.5 - hyp.translate, 0.5 + hyp.translate),
                            border_mode=cv2.BORDER_CONSTANT,
                            value=(114, 114, 114), p=1.0),
         A.Blur(p=0.01),
