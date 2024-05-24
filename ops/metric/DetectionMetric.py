@@ -192,7 +192,7 @@ class MeanAveragePrecision:
         preds = non_max_suppression(preds, self.conf_thres, self.iou_thres,
                                     labels=[],
                                     max_det=self.max_det,
-                                    multi_label=True,
+                                    multi_label=False,
                                     agnostic=False)
         for si, pred in enumerate(preds):
             labels = targets[targets[:, 0] == si, 1:]
