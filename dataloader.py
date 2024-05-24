@@ -19,6 +19,7 @@ from ops.transform.resize_maker import ResizeShortLongest
 from ops.utils.logging import colorstr
 from lightning.fabric.utilities.rank_zero import rank_zero_info
 from ops.utils.torch_utils import torch_distributed_zero_first
+import ops.cv.io as io
 import random
 
 PIN_MEMORY = str(os.getenv("PIN_MEMORY", True)).lower() == "true"  # global pin_memory for dataloaders
@@ -160,10 +161,10 @@ class MyDataSet(VOCDetection):
         #     sample['bboxes'] = bboxes
         #     sample['classes'] = classes
 
-        # io.visualize(sample['image'], sample['bboxes'], classes, self.id2name)
-
         if self.augment:
             sample = self.transform(**sample)
+
+        io.visualize(sample['image'], sample['bboxes'], classes, self.id2name)
 
         image = ToTensorV2()(image=sample['image'])['image'].float()
         bboxes = torch.FloatTensor(sample['bboxes'])
@@ -193,10 +194,9 @@ def create_dataloader(path,
                       persistent_workers=False,
                       seed=0):
     transform = A.Compose([
-        A.Affine(translate_percent=(-0.5, -0.5), cval=(114, 114, 114), p=1.0),
         A.ShiftScaleRotate(rotate_limit=0,
                            scale_limit=(1 - hyp.scale, 1 + hyp.scale),
-                           shift_limit=(0.5 - hyp.translate, 0.5 + hyp.translate),
+                           shift_limit=(-0.1, 0.0629),
                            border_mode=cv2.BORDER_CONSTANT,
                            value=(114, 114, 114), p=1.0),
         A.Blur(p=0.01),
