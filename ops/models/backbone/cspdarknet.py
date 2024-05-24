@@ -166,7 +166,7 @@ class CSPDarknetV2(nn.Module):
         self.crossStagePartial4 = nn.Sequential(
             DownSampleLayer(base_channels * 8, base_channels * 16),
             WrapLayer(base_channels * 16, base_channels * 16, base_depth),
-            SPPF(base_channels * 16, base_channels * 16, [5]),
+            SPPF(base_channels * 16, base_channels * 16, [5], conv_layer=CBM),
         )
 
         self.reset_parameters()
