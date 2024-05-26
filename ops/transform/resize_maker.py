@@ -6,25 +6,6 @@ import numpy as np
 import cv2
 from albumentations import DualTransform
 
-from ops.transform.pad_maker import PaddingImage
-import ops.cv.io as io
-
-
-def resize_boxes_ratio(boxes, ratio_height, ratio_width):
-    xmin, ymin, xmax, ymax = boxes
-
-    xmin = xmin * ratio_width
-    xmax = xmax * ratio_width
-    ymin = ymin * ratio_height
-    ymax = ymax * ratio_height
-    return xmin, ymin, xmax, ymax
-
-
-def resize_boxes(boxes, original_size, new_size):
-    ratio_height = new_size[0] / original_size[0]
-    ratio_width = new_size[1] / original_size[1]
-    return resize_boxes_ratio(boxes, ratio_height, ratio_width)
-
 
 class ResizeShortLongest(DualTransform):
     def __init__(self, image_size: List[int],
