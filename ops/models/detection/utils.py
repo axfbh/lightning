@@ -47,8 +47,6 @@ class Yolo(LightningModule):
         if not self.trainer.sanity_checking:
             seen, nt, mp, mr, map50, map = self.map_metric.compute()
 
-            print(map50)
-
             fitness = map * 0.9 + map50 * 0.1
 
             self.log_dict({'Images_unplot': seen,
