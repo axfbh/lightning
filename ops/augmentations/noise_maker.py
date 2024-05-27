@@ -1,7 +1,7 @@
 import random
 import cv2
 import numpy as np
-from ops.transform.basic_transform import SalienceTransform
+from ops.augmentations.basic_transform import SalienceTransform
 from typing import List
 import ops.cv.io as io
 

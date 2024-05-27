@@ -1,7 +1,7 @@
 import numpy as np
 import random
 import cv2
-from ops.transform.basic_transform import SalienceTransform
+from ops.augmentations.basic_transform import SalienceTransform
 
 
 def _valid_up_size(image, salience_area, scale):
