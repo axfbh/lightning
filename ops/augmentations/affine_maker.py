@@ -6,7 +6,7 @@ import numpy as np
 
 import cv2
 from albumentations import DualTransform
-from ops.cv.transform import bbox_shift_scale_rotate, shift_scale_rotate_matrix
+from ops.augmentations.functional import bbox_shift_scale_rotate, shift_scale_rotate_matrix
 
 
 class RandomShiftScaleRotate(DualTransform):

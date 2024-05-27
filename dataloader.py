@@ -15,8 +15,8 @@ from albumentations.pytorch import ToTensorV2
 from ops.dataset.voc_dataset import VOCDetection
 from ops.dataset.utils import detect_collate_fn
 from torchvision.ops.boxes import box_convert
-from ops.transform.resize_maker import ResizeShortLongest
-from ops.transform.affine_maker import RandomShiftScaleRotate
+from ops.augmentations.resize_maker import ResizeShortLongest
+from ops.augmentations.affine_maker import RandomShiftScaleRotate
 from ops.utils.logging import colorstr
 from lightning.fabric.utilities.rank_zero import rank_zero_info
 from ops.utils.torch_utils import torch_distributed_zero_first

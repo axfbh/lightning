@@ -9,12 +9,7 @@ import numpy as np
 
 from torchvision import transforms, datasets
 
-from ops.dataset.utils import detect_collate_fn
-from ops.utils.logging import LOGGER, colorstr
-from ops.utils.torch_utils import torch_distributed_zero_first
 import random
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
 
 PIN_MEMORY = str(os.getenv("PIN_MEMORY", True)).lower() == "true"  # global pin_memory for dataloaders
 
