@@ -61,8 +61,9 @@ class WarmupLR(Callback):
     ) -> None:
         opt = pl_module.optimizers()
         sch = pl_module.lr_schedulers()
+        epoch = pl_module.current_epoch
 
-        ni = trainer._active_loop.batch_idx + trainer.num_training_batches * pl_module.current_epoch
+        ni = batch_idx + trainer.num_training_batches * epoch
         nw = max(round(trainer.num_training_batches * self.warmup_epoch), 100)
         batch_size = trainer.train_dataloader.batch_size
         if ni <= nw:
@@ -73,7 +74,7 @@ class WarmupLR(Callback):
                 x["lr"] = np.interp(
                     ni,
                     xi,
-                    [self.warmup_bias_lr if j == 0 else 0.0, x["initial_lr"] * lf(pl_module.current_epoch)]
+                    [self.warmup_bias_lr if j == 0 else 0.0, x["initial_lr"] * lf(epoch)]
                 )
                 if "momentum" in x:
                     x["momentum"] = np.interp(

@@ -62,6 +62,7 @@ def setup(opt, hyp):
     batch_size = opt.batch_size
     nbs = 64  # nominal batch size
     accumulate = max(round(nbs / batch_size), 1)
+    hyp["weight_decay"] *= batch_size * accumulate / nbs
 
     tb_logger = TensorBoardLogger(save_dir=opt.project, name=opt.name)
 
@@ -142,11 +143,9 @@ def main(opt):
                                      hyp=hyp,
                                      image_set='car_train',
                                      augment=True,
-                                     rank=trainer.global_rank,
                                      workers=opt.workers,
                                      shuffle=True,
-                                     persistent_workers=True,
-                                     seed=opt.seed)
+                                     persistent_workers=True)
 
     val_loader = create_dataloader(Path(data.val),
                                    opt.image_size,
@@ -155,11 +154,9 @@ def main(opt):
                                    hyp=hyp,
                                    image_set='car_val',
                                    augment=False,
-                                   rank=trainer.global_rank,
                                    workers=opt.workers,
                                    shuffle=False,
-                                   persistent_workers=True,
-                                   seed=opt.seed)
+                                   persistent_workers=True)
 
     trainer.fit(model=model,
                 train_dataloaders=train_loader,
