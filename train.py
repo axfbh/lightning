@@ -3,22 +3,13 @@ import argparse
 from pathlib import Path
 from omegaconf import OmegaConf
 
-import torch
-import torch.distributed
-
 from dataloader import create_dataloader
 
 from ops.models.detection import YoloV5, YoloV4, YoloV7
-from ops.utils import extract_ip
 from ops.utils.logging import print_args, colorstr
-from ops.utils.callbacks import PlotLogger, WarmupLR
+from ops.utils.callbacks import WarmupLR
+from ops.utils.trainer import Trainer
 
-import lightning as L
-from lightning.pytorch.strategies import DDPStrategy
-from lightning.pytorch.loggers import TensorBoardLogger
-from lightning.pytorch.callbacks import ModelCheckpoint
-
-from utils.callbacks import DetectProgressBar
 from lightning.fabric.utilities.rank_zero import rank_zero_info
 
 
@@ -64,46 +55,57 @@ def setup(opt, hyp):
     accumulate = max(round(nbs / batch_size), 1)
     hyp["weight_decay"] *= batch_size * accumulate / nbs
 
-    tb_logger = TensorBoardLogger(save_dir=opt.project, name=opt.name)
-
-    # ddp = DDPStrategy(process_group_backend="nccl" if torch.distributed.is_nccl_available() else 'gloo')
-
     warmup_callback = WarmupLR(nbs=nbs,
                                momentum=hyp['momentum'],
                                warmup_bias_lr=hyp['warmup_bias_lr'],
                                warmup_epoch=hyp["warmup_epoch"],
                                warmup_momentum=hyp['warmup_momentum'])
 
-    bar_callback = DetectProgressBar()
+    trainer = Trainer(
+        device=opt.device,
+        max_epochs=opt.epochs,
+        save_dir=opt.project,
+        names=opt.name,
+        accumulate=accumulate,
+        bar_train_title=("box_loss", "obj_loss", "cls_loss"),
+        bar_val_title=("Images", "Instances", "P", "R", "mAP50", "mAP50-95"),
+        callbacks=[warmup_callback]
+    )
 
-    plt_callback = PlotLogger(6)
+    # tb_logger = TensorBoardLogger(save_dir=opt.project, name=opt.name)
+    #
+    # ddp = DDPStrategy(process_group_backend="nccl" if torch.distributed.is_nccl_available() else 'gloo')
 
-    checkpoint_callback = ModelCheckpoint(filename='best',
-                                          save_last=True,
-                                          monitor='fitness_un',
-                                          mode='max',
-                                          auto_insert_metric_name=False,
-                                          enable_version_counter=False)
-    checkpoint_callback.FILE_EXTENSION = '.pt'
+    # bar_callback = DetectProgressBar()
 
-    trainer = L.Trainer(accelerator=opt.device,
-                        # devices=1,
-                        # num_nodes=1,
-                        logger=tb_logger,
-                        max_epochs=opt.epochs,
-                        # strategy=ddp,
-                        accumulate_grad_batches=accumulate,
-                        # clip gradients' global norm to <=10.0 using gradient_clip_algorithm='norm'
-                        gradient_clip_val=10.0,
-                        gradient_clip_algorithm="norm",
-                        num_sanity_val_steps=1,
-                        log_every_n_steps=1,
-                        callbacks=[
-                            warmup_callback,
-                            bar_callback,
-                            plt_callback,
-                            checkpoint_callback
-                        ])
+    # plt_callback = PlotLogger(6)
+    #
+    # checkpoint_callback = ModelCheckpoint(filename='best',
+    #                                       save_last=True,
+    #                                       monitor='fitness_un',
+    #                                       mode='max',
+    #                                       auto_insert_metric_name=False,
+    #                                       enable_version_counter=False)
+    # checkpoint_callback.FILE_EXTENSION = '.pt'
+    #
+    # trainer = L.Trainer(accelerator=opt.device,
+    #                     devices=1,
+    #                     num_nodes=1,
+    #                     logger=tb_logger,
+    #                     max_epochs=opt.epochs,
+    #                     strategy=ddp,
+    #                     accumulate_grad_batches=accumulate,
+    #                     # clip gradients' global norm to <=10.0 using gradient_clip_algorithm='norm'
+    #                     gradient_clip_val=10.0,
+    #                     gradient_clip_algorithm="norm",
+    #                     num_sanity_val_steps=1,
+    #                     log_every_n_steps=1,
+    #                     callbacks=[
+    #                         warmup_callback,
+    #                         bar_callback,
+    #                         plt_callback,
+    #                         checkpoint_callback
+    #                     ])
 
     print_args(vars(opt))
     rank_zero_info(colorstr("hyperparameters: ") + ", ".join(f"{k}={v}" for k, v in hyp.items()))
@@ -164,12 +166,5 @@ def main(opt):
                 ckpt_path=opt.weights if opt.resume else None)
 
 
-def init_parallel_process():
-    os.environ['MASTER_ADDR'] = extract_ip()
-    os.environ['MASTER_PORT'] = '51899'
-    os.environ['NODE_RANK'] = '0'
-
-
 if __name__ == '__main__':
-    # init_parallel_process()
     main(parse_opt())

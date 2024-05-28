@@ -56,6 +56,12 @@ class WarmupLR(Callback):
         self.warmup_epoch = warmup_epoch
         self.momentum = momentum
 
+    def _update_warmup_parameters(self, trainer, epoch, batch_idx):
+        ni = batch_idx + trainer.num_training_batches * epoch
+        nw = max(round(trainer.num_training_batches * self.warmup_epoch), 100)
+        batch_size = trainer.train_dataloader.batch_size
+        return ni, nw, batch_size
+
     def on_train_batch_start(
             self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", batch: Any, batch_idx: int
     ) -> None:
@@ -63,9 +69,7 @@ class WarmupLR(Callback):
         sch = pl_module.lr_schedulers()
         epoch = pl_module.current_epoch
 
-        ni = batch_idx + trainer.num_training_batches * epoch
-        nw = max(round(trainer.num_training_batches * self.warmup_epoch), 100)
-        batch_size = trainer.train_dataloader.batch_size
+        ni, nw, batch_size = self._update_warmup_parameters(trainer, epoch, batch_idx)
         if ni <= nw:
             xi = [0, nw]  # x interp
             trainer.accumulate_grad_batches = max(1, np.interp(ni, xi, [1, self.nbs / batch_size]).round())
@@ -86,6 +90,11 @@ class WarmupLR(Callback):
 
 class TQDMProgressBar(tqdm_progress.TQDMProgressBar):
     TQDM_BAR_FORMAT = "{l_bar}{bar:10}{r_bar}"  # tqdm bar format
+
+    def __init__(self, train_title, val_title, refresh_rate: int = 1, process_position: int = 0):
+        super(TQDMProgressBar, self).__init__(refresh_rate, process_position)
+        self.train_title = train_title
+        self.val_title = val_title
 
     def init_sanity_tqdm(self) -> Tqdm:
         """Override this to customize the tqdm bar for the validation sanity run."""
@@ -135,10 +144,12 @@ class TQDMProgressBar(tqdm_progress.TQDMProgressBar):
         return ("%11.4g" * len(res)) % (*res,)
 
     def get_train_tile(self) -> None:
-        raise NotImplemented
+        return _info(
+            ("\n" + "%11s" * 3) % ("Epoch", "GPU_mem", "lr") + ("%11s" * len(self.train_title)) % self.train_title
+        )
 
     def get_val_tile(self) -> str:
-        raise NotImplemented
+        return ("%11s" * len(self.val_title)) % self.val_title
 
     def on_sanity_check_start(self, *_: Any) -> None:
         self.val_progress_bar = self.init_sanity_tqdm()
@@ -157,9 +168,7 @@ class TQDMProgressBar(tqdm_progress.TQDMProgressBar):
         self.train_progress_bar.reset(convert_inf(self.total_train_batches))
         self.train_progress_bar.initial = 0
 
-    def on_before_optimizer_step(
-            self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", optimizer: Optimizer
-    ) -> None:
+    def on_before_zero_grad(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", optimizer: Optimizer) -> None:
         n = trainer._active_loop.batch_idx + 1
         if self._should_update(n, self.train_progress_bar.total):  # rank 0 更新 bar
             _update_n(self.train_progress_bar, n)
