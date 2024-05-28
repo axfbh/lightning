@@ -23,25 +23,23 @@ class Trainer:
                  bar_val_title: Tuple,
                  gradient_clip_val=10,
                  gradient_clip_algorithm="norm",
-                 ddp: bool = False,
                  accumulate: int = 1,
                  num_nodes: int = 1,
-                 nproc_per_node: int = "auto",
+                 nproc_per_node: int = 1,
                  master_addr: str = extract_ip(),
                  master_port: str = "8888",
                  node_rank: str = "0",
                  callbacks: List = None):
 
-        if ddp:
+        ddp = 'auto'
+
+        if nproc_per_node > 1 or num_nodes > 1:
             os.environ['MASTER_ADDR'] = master_addr
             os.environ['MASTER_PORT'] = master_port
             os.environ['NODE_RANK'] = node_rank
+            ddp = DDPStrategy(process_group_backend="nccl" if torch.distributed.is_nccl_available() else 'gloo')
 
         tb_logger = TensorBoardLogger(save_dir=save_dir, name=names)
-
-        ddp = DDPStrategy(
-            process_group_backend="nccl" if torch.distributed.is_nccl_available() else 'gloo'
-        ) if ddp else "auto"
 
         if callbacks is None:
             callbacks = []

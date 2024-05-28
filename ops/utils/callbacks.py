@@ -168,7 +168,7 @@ class TQDMProgressBar(tqdm_progress.TQDMProgressBar):
         self.train_progress_bar.reset(convert_inf(self.total_train_batches))
         self.train_progress_bar.initial = 0
 
-    def on_before_zero_grad(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", optimizer: Optimizer) -> None:
+    def on_after_backward(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
         n = trainer._active_loop.batch_idx + 1
         if self._should_update(n, self.train_progress_bar.total):  # rank 0 更新 bar
             _update_n(self.train_progress_bar, n)

@@ -59,25 +59,25 @@ class MyDataSet(VOCDetection):
     def __getitem__(self, item):
         image, bboxes, classes = super().__getitem__(item)
 
-        if self.augment:
-            arr = np.random.randint(0, len(self.img_ids), 3)
-            image_cache = []
-            bboxes_cache = []
-            classes_cache = []
-            for i in arr:
-                im, box, cls = super().__getitem__(i)
-                image_cache.append(cv2.cvtColor(im, cv2.COLOR_RGB2BGR))
-                bboxes_cache.append(box)
-                classes_cache.append(cls)
-
-            sample = Mosaic(640, 640, False, always_apply=True)(image=cv2.cvtColor(image, cv2.COLOR_RGB2BGR),
-                                                                bboxes=bboxes,
-                                                                image_cache=image_cache,
-                                                                bboxes_cache=bboxes_cache)
-
-            if self.augment:
-                print(sample['image'].shape)
-                io.visualize(sample['image'], sample['bboxes'], [j for i in classes_cache for j in i], self.id2name)
+        # if self.augment:
+        #     arr = np.random.randint(0, len(self.img_ids), 3)
+        #     image_cache = []
+        #     bboxes_cache = []
+        #     classes_cache = []
+        #     for i in arr:
+        #         im, box, cls = super().__getitem__(i)
+        #         image_cache.append(cv2.cvtColor(im, cv2.COLOR_RGB2BGR))
+        #         bboxes_cache.append(box)
+        #         classes_cache.append(cls)
+        #
+        #     sample = Mosaic(640, 640, False, always_apply=True)(image=cv2.cvtColor(image, cv2.COLOR_RGB2BGR),
+        #                                                         bboxes=bboxes,
+        #                                                         image_cache=image_cache,
+        #                                                         bboxes_cache=bboxes_cache)
+        #
+        #     if self.augment:
+        #         print(sample['image'].shape)
+        #         io.visualize(sample['image'], sample['bboxes'], [j for i in classes_cache for j in i], self.id2name)
 
         if self.augment:
             augment_hsv(image, hgain=0.015, sgain=0.7, vgain=0.4)

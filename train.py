@@ -64,6 +64,7 @@ def setup(opt, hyp):
         save_dir=opt.project,
         names=opt.name,
         device=opt.device,
+        nproc_per_node=1,
         accumulate=accumulate,
         bar_train_title=("box_loss", "obj_loss", "cls_loss"),
         bar_val_title=("Images", "Instances", "P", "R", "mAP50", "mAP50-95"),
