@@ -28,7 +28,7 @@ def parse_opt():
     parser.add_argument("--batch-size", type=int, default=16, help="total batch size for all GPUs")
     parser.add_argument("--image-size", type=list, default=[640, 640], help="train, val image size (pixels)")
     parser.add_argument("--resume", nargs="?", const=True, default=False, help="resume most recent training")
-    parser.add_argument("--device", default="gpu", help="cuda device, i.e. 0 or 0,1,2,3 or cpu")
+    parser.add_argument("--device", default="gpu", help="cpu, gpu, tpu, ipu, hpu, mps, auto")
     parser.add_argument("--single-cls", action="store_true", help="train multi-class data as single-class")
     parser.add_argument("--optimizer", type=str, choices=["SGD", "Adam", "AdamW"],
                         default="SGD",
@@ -62,10 +62,10 @@ def setup(opt, hyp):
                                warmup_momentum=hyp['warmup_momentum'])
 
     trainer = Trainer(
-        device=opt.device,
         max_epochs=opt.epochs,
         save_dir=opt.project,
         names=opt.name,
+        device=opt.device,
         accumulate=accumulate,
         bar_train_title=("box_loss", "obj_loss", "cls_loss"),
         bar_val_title=("Images", "Instances", "P", "R", "mAP50", "mAP50-95"),
