@@ -47,16 +47,59 @@ def augment_hsv(im, hgain=0.5, sgain=0.5, vgain=0.5):
         cv2.cvtColor(im_hsv, cv2.COLOR_HSV2RGB, dst=im)  # no return needed
 
 
+def xywhn2xyxy(x, w=640, h=640, padw=0, padh=0):
+    # Convert nx4 boxes from [x, y, w, h] normalized to [x1, y1, x2, y2] where xy1=top-left, xy2=bottom-right
+    y = x.clone() if isinstance(x, torch.Tensor) else np.copy(x)
+    y[..., 0] = x[..., 0] + padw  # top left x
+    y[..., 1] = x[..., 1] + padh  # top left y
+    y[..., 2] = x[..., 2] + padw  # bottom right x
+    y[..., 3] = x[..., 3] + padh  # bottom right y
+    return y
+
+
 class MyDataSet(VOCDetection):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.resize = A.Compose([
             ResizeShortLongest(self.image_size, always_apply=True),
-            A.PadIfNeeded(*self.image_size, always_apply=True, border_mode=cv2.BORDER_CONSTANT, value=(114, 114, 114))
+            # A.PadIfNeeded(*self.image_size, always_apply=True, border_mode=cv2.BORDER_CONSTANT, value=(114, 114, 114))
         ], A.BboxParams(format='pascal_voc', label_fields=['classes']))
 
+    def load_mosaic(self, item):
+        indices = [item] + random.choices(range(len(self.img_ids)), k=3)  # 3 additional image indices
+        random.shuffle(indices)
+        height, width = self.image_size
+        center_x = width // 2
+        center_y = height // 2
+        yc, xc = (int(random.uniform(-x, 2 * width + x)) for x in [-center_x, -center_y])  # mosaic center x, y
+        img4 = np.full((height * 2, width * 2, 3), 114, dtype=np.uint8)  # base image with 4 tiles
+        for i, index in enumerate(indices):
+            image, bboxes, classes = super().__getitem__(index)
+            sample = self.resize(image=image, bboxes=bboxes, classes=classes)
+            image, bboxes, classes = sample['image'], sample['bboxes'], sample['classes']
+            (h, w) = image.shape[:2]
+
+            if i == 0:  # top left
+                x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc  # xmin, ymin, xmax, ymax (large image)
+                x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
+            elif i == 1:  # top right
+                x1a, y1a, x2a, y2a = xc, max(yc - h, 0), min(xc + w, width * 2), yc
+                x1b, y1b, x2b, y2b = 0, h - (y2a - y1a), min(w, x2a - x1a), h
+            elif i == 2:  # bottom left
+                x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(height * 2, yc + h)
+                x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
+            elif i == 3:  # bottom right
+                x1a, y1a, x2a, y2a = xc, yc, min(xc + w, width * 2), min(height * 2, yc + h)
+                x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
+
+            img4[y1a:y2a, x1a:x2a] = image[y1b:y2b, x1b:x2b]  # img4[ymin:ymax, xmin:xmax]
+            padw = x1a - x1b
+            padh = y1a - y1b
+            bboxes = np.clip(xywhn2xyxy(np.array(bboxes), w, h, padw, padh), 0,2 * width)  # normalized xywh to pixel xyxy format
+
     def __getitem__(self, item):
+        self.load_mosaic(item)
         image, bboxes, classes = super().__getitem__(item)
 
         # if self.augment:
@@ -69,12 +112,12 @@ class MyDataSet(VOCDetection):
         #         image_cache.append(cv2.cvtColor(im, cv2.COLOR_RGB2BGR))
         #         bboxes_cache.append(box)
         #         classes_cache.append(cls)
-        #
-        #     sample = Mosaic(640, 640, False, always_apply=True)(image=cv2.cvtColor(image, cv2.COLOR_RGB2BGR),
-        #                                                         bboxes=bboxes,
-        #                                                         image_cache=image_cache,
-        #                                                         bboxes_cache=bboxes_cache)
-        #
+
+        # sample = Mosaic(640, 640, False, always_apply=True)(image=cv2.cvtColor(image, cv2.COLOR_RGB2BGR),
+        #                                                     bboxes=bboxes,
+        #                                                     image_cache=image_cache,
+        #                                                     bboxes_cache=bboxes_cache)
+
         #     if self.augment:
         #         print(sample['image'].shape)
         #         io.visualize(sample['image'], sample['bboxes'], [j for i in classes_cache for j in i], self.id2name)
