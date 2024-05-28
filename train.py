@@ -41,8 +41,6 @@ def parse_opt():
     parser.add_argument("--project", default="./runs", help="save to project/name")
     parser.add_argument("--name", default="train", help="save to project/name")
     parser.add_argument("--label-smoothing", type=float, default=0.0, help="Label smoothing epsilon")
-    parser.add_argument("--save-period", type=int, default=5, help="Save checkpoint every x epochs (disabled if < 1)")
-    parser.add_argument("--seed", type=int, default=0, help="Global training seed")
     parser.add_argument("--local_rank", type=int, default=-1, help="Automatic DDP Multi-GPU argument, do not modify")
 
     return parser.parse_args()
