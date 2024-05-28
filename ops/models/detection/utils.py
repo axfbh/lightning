@@ -25,7 +25,8 @@ class Yolo(LightningModule):
                        'cls_loss': loss_items[2]},
                       on_epoch=True, sync_dist=True, batch_size=self.trainer.train_dataloader.batch_size)
 
-        return loss
+        # lightning 的 loss / accumulate ，影响收敛
+        return loss * self.trainer.accumulate_grad_batches
 
     def on_train_batch_end(self, outputs, batch: Any, batch_idx: int) -> None:
         self.ema_model.update(self)

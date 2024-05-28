@@ -15,3 +15,8 @@ First move, model.to(device)
     def configure_optimizers(self):
 
 global_step :  optimizer step times
+
+
+
+# lightning 的 loss / accumulate ，影响收敛
+return loss * self.trainer.accumulate_grad_batches

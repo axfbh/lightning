@@ -33,7 +33,7 @@ def parse_opt():
     parser.add_argument("--hyp", type=str, default="./data/hyp/hyp-yolo-v5-low.yaml", help="hyperparameters path")
 
     # -------------- 参数值 --------------
-    parser.add_argument("--epochs", type=int, default=301, help="total training epochs")
+    parser.add_argument("--epochs", type=int, default=300, help="total training epochs")
     parser.add_argument("--batch-size", type=int, default=16, help="total batch size for all GPUs")
     parser.add_argument("--image-size", type=list, default=[640, 640], help="train, val image size (pixels)")
     parser.add_argument("--resume", nargs="?", const=True, default=False, help="resume most recent training")
@@ -66,7 +66,7 @@ def setup(opt, hyp):
 
     tb_logger = TensorBoardLogger(save_dir=opt.project, name=opt.name)
 
-    ddp = DDPStrategy(process_group_backend="nccl" if torch.distributed.is_nccl_available() else 'gloo')
+    # ddp = DDPStrategy(process_group_backend="nccl" if torch.distributed.is_nccl_available() else 'gloo')
 
     warmup_callback = WarmupLR(nbs=nbs,
                                momentum=hyp['momentum'],
@@ -87,11 +87,11 @@ def setup(opt, hyp):
     checkpoint_callback.FILE_EXTENSION = '.pt'
 
     trainer = L.Trainer(accelerator=opt.device,
-                        devices=1,
-                        num_nodes=1,
+                        # devices=1,
+                        # num_nodes=1,
                         logger=tb_logger,
                         max_epochs=opt.epochs,
-                        strategy=ddp,
+                        # strategy=ddp,
                         accumulate_grad_batches=accumulate,
                         # clip gradients' global norm to <=10.0 using gradient_clip_algorithm='norm'
                         gradient_clip_val=10.0,
