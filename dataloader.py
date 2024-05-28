@@ -1,8 +1,6 @@
 import os
-from pathlib import Path
 
 import cv2
-from omegaconf import OmegaConf
 
 import torch
 from torch.utils.data import DataLoader, distributed
@@ -11,12 +9,12 @@ import numpy as np
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+from albumentations.augmentations import transforms
 
 from ops.dataset.voc_dataset import VOCDetection
 from ops.dataset.utils import detect_collate_fn
 from torchvision.ops.boxes import box_convert
-from ops.augmentations.resize_maker import ResizeShortLongest
-from ops.augmentations.affine_maker import RandomShiftScaleRotate
+from ops.augmentations.transforms import ResizeShortLongest, RandomShiftScaleRotate, Mosaic
 from ops.utils.logging import colorstr
 from lightning.fabric.utilities.rank_zero import rank_zero_info
 from ops.utils.torch_utils import torch_distributed_zero_first
@@ -62,15 +60,32 @@ class MyDataSet(VOCDetection):
         image, bboxes, classes = super().__getitem__(item)
 
         if self.augment:
+            arr = np.random.randint(0, len(self.img_ids), 3)
+            image_cache = []
+            bboxes_cache = []
+            classes_cache = []
+            for i in arr:
+                im, box, cls = super().__getitem__(i)
+                image_cache.append(cv2.cvtColor(im, cv2.COLOR_RGB2BGR))
+                bboxes_cache.append(box)
+                classes_cache.append(cls)
+
+            sample = Mosaic(640, 640, False, always_apply=True)(image=cv2.cvtColor(image, cv2.COLOR_RGB2BGR),
+                                                                bboxes=bboxes,
+                                                                image_cache=image_cache,
+                                                                bboxes_cache=bboxes_cache)
+
+            if self.augment:
+                print(sample['image'].shape)
+                io.visualize(sample['image'], sample['bboxes'], [j for i in classes_cache for j in i], self.id2name)
+
+        if self.augment:
             augment_hsv(image, hgain=0.015, sgain=0.7, vgain=0.4)
 
         sample = self.resize(image=image, bboxes=bboxes, classes=classes)
 
         if self.augment:
             sample = self.transform(**sample)
-
-        # if self.augment:
-        #     io.visualize(sample['image'], sample['bboxes'], classes, self.id2name)
 
         image = ToTensorV2()(image=sample['image'])['image'].float()
         bboxes = torch.FloatTensor(sample['bboxes'])
