@@ -72,41 +72,6 @@ def setup(opt, hyp):
         callbacks=[warmup_callback]
     )
 
-    # tb_logger = TensorBoardLogger(save_dir=opt.project, name=opt.name)
-    #
-    # ddp = DDPStrategy(process_group_backend="nccl" if torch.distributed.is_nccl_available() else 'gloo')
-
-    # bar_callback = DetectProgressBar()
-
-    # plt_callback = PlotLogger(6)
-    #
-    # checkpoint_callback = ModelCheckpoint(filename='best',
-    #                                       save_last=True,
-    #                                       monitor='fitness_un',
-    #                                       mode='max',
-    #                                       auto_insert_metric_name=False,
-    #                                       enable_version_counter=False)
-    # checkpoint_callback.FILE_EXTENSION = '.pt'
-    #
-    # trainer = L.Trainer(accelerator=opt.device,
-    #                     devices=1,
-    #                     num_nodes=1,
-    #                     logger=tb_logger,
-    #                     max_epochs=opt.epochs,
-    #                     strategy=ddp,
-    #                     accumulate_grad_batches=accumulate,
-    #                     # clip gradients' global norm to <=10.0 using gradient_clip_algorithm='norm'
-    #                     gradient_clip_val=10.0,
-    #                     gradient_clip_algorithm="norm",
-    #                     num_sanity_val_steps=1,
-    #                     log_every_n_steps=1,
-    #                     callbacks=[
-    #                         warmup_callback,
-    #                         bar_callback,
-    #                         plt_callback,
-    #                         checkpoint_callback
-    #                     ])
-
     print_args(vars(opt))
     rank_zero_info(colorstr("hyperparameters: ") + ", ".join(f"{k}={v}" for k, v in hyp.items()))
 

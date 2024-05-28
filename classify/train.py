@@ -3,23 +3,15 @@ import argparse
 from pathlib import Path
 from omegaconf import OmegaConf
 
-import socket
-
-import torch
-import torch.distributed
-
 from models.modeling import ResNet
 from dataloader import create_dataloader
 
 from ops.utils import extract_ip
-from ops.utils.logging import print_args, logger_info_rank_zero_only, colorstr
-from ops.utils.callbacks import PlotLogger, WarmupLR
+from ops.utils.logging import print_args, colorstr
+from ops.utils.callbacks import WarmupLR
+from ops.utils.trainer import Trainer
 
-import lightning as L
-from lightning.pytorch.strategies import DDPStrategy
-from lightning.pytorch.loggers import TensorBoardLogger
-from lightning.pytorch.callbacks import StochasticWeightAveraging, ModelCheckpoint
-from utils.callbacks import ClassifyProgressBar
+from lightning.fabric.utilities.rank_zero import rank_zero_info
 
 
 def parse_opt():
@@ -60,48 +52,27 @@ def setup(opt, hyp):
     batch_size = opt.batch_size
     nbs = 64  # nominal batch size
     accumulate = max(round(nbs / batch_size), 1)
-
-    tb_logger = TensorBoardLogger(save_dir=opt.project, name=opt.name)
-
-    ddp = DDPStrategy(process_group_backend="nccl" if torch.distributed.is_nccl_available() else 'gloo')
+    hyp["weight_decay"] *= batch_size * accumulate / nbs
 
     warmup_callback = WarmupLR(nbs=nbs,
                                momentum=hyp['momentum'],
                                warmup_bias_lr=hyp['warmup_bias_lr'],
-                               warmup_epoch=hyp["warmup_epochs"],
+                               warmup_epoch=hyp["warmup_epoch"],
                                warmup_momentum=hyp['warmup_momentum'])
 
-    swa_callback = StochasticWeightAveraging(swa_lrs=1e-2)
-
-    bar_callback = ClassifyProgressBar()
-
-    plt_callback = PlotLogger(4)
-
-    checkpoint_callback = ModelCheckpoint(filename='best',
-                                          save_last=True,
-                                          monitor='fitness',
-                                          mode='max',
-                                          auto_insert_metric_name=False,
-                                          enable_version_counter=False)
-    checkpoint_callback.FILE_EXTENSION = '.pt'
-
-    trainer = L.Trainer(accelerator=opt.device,
-                        devices=1,
-                        num_nodes=1,
-                        logger=tb_logger,
-                        max_epochs=opt.epochs,
-                        strategy=ddp,
-                        num_sanity_val_steps=1,
-                        accumulate_grad_batches=accumulate,
-                        log_every_n_steps=1,
-                        callbacks=[warmup_callback,
-                                   swa_callback,
-                                   bar_callback,
-                                   plt_callback,
-                                   checkpoint_callback])
+    trainer = Trainer(
+        device=opt.device,
+        max_epochs=opt.epochs,
+        save_dir=opt.project,
+        names=opt.name,
+        accumulate=accumulate,
+        bar_train_title=("loss",),
+        bar_val_title=("F1", "P", "R", "Accuracy"),
+        callbacks=[warmup_callback]
+    )
 
     print_args(vars(opt))
-    logger_info_rank_zero_only(colorstr("hyperparameters: ") + ", ".join(f"{k}={v}" for k, v in hyp.items()))
+    rank_zero_info(colorstr("hyperparameters: ") + ", ".join(f"{k}={v}" for k, v in hyp.items()))
 
     return trainer
 
@@ -127,9 +98,6 @@ def main(opt):
                                      '',
                                      image_set=True,
                                      augment=True,
-                                     local_rank=trainer.local_rank,
-                                     rank=trainer.global_rank,
-                                     num_nodes=trainer.num_nodes,
                                      workers=opt.workers,
                                      shuffle=True,
                                      persistent_workers=True,
