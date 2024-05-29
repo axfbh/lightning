@@ -114,7 +114,7 @@ class MyDataSet(VOCDetection):
         return sample
 
     def __getitem__(self, item):
-        if random.random() < self.mosaic:
+        if random.random() < self.mosaic and self.augment:
             sample = self.load_mosaic(item)
             # io.visualize(cv2.cvtColor(sample['image'], cv2.COLOR_RGB2BGR),
             #              sample['bboxes'],
