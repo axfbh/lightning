@@ -109,7 +109,8 @@ class MyDataSet(VOCDetection):
                 bboxes4.append(bboxes)
                 classes4.extend(classes.tolist())
 
-        bboxes4 = np.concatenate(bboxes4, 0)
+        if len(bboxes4):
+            bboxes4 = np.concatenate(bboxes4, 0)
         sample = self.mosaic_aug(image=img4, bboxes=bboxes4, classes=classes4)
         return sample
 
