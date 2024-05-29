@@ -199,18 +199,14 @@ class Mosaic(DualTransform):
             self,
             height,
             width,
-            replace=True,
             fill_value=0,
-            bboxes_format="pascal_voc",
             always_apply=False,
             p=0.5,
     ):
         super().__init__(always_apply=always_apply, p=p)
         self.height = height
         self.width = width
-        self.replace = replace
         self.fill_value = fill_value
-        self.bboxes_format = bboxes_format
         self.__target_dependence = {}
 
     def get_transform_init_args_names(self) -> Tuple[str, ...]:
@@ -238,78 +234,52 @@ class Mosaic(DualTransform):
         if "mask" in kwargs:
             self.target_dependence["mask"] = {"mask_cache": kwargs["mask_cache"]}
         if "bboxes" in kwargs:
-            self.target_dependence["bboxes"] = {
-                "image": kwargs["image"],
-                "image_cache": kwargs["image_cache"],
-                "bboxes_cache": kwargs["image_cache"],
-            }
+            self.target_dependence["bboxes"] = {"bboxes_cache": kwargs["bboxes_cache"]}
 
-    def apply(self, image, image_cache=None, indices=None, height=0, width=0, fill_value=114, **params):
-        image_batch = []
-        for i in indices:
-            if i == 0:
-                image_batch.append(image)
-            else:
-                image_batch.append(image_cache[i - 1])
-        return F.mosaic4(image_batch, height, width, fill_value)
+    def apply(self, image, image_cache=None, height=0, width=0, fill_value=114, **params):
+        image_cache.append(image)
+        image, self.padh_cache, self.padw_cache = F.mosaic4(image_cache, height, width, fill_value)
+        return image
 
-    def apply_to_mask(self, mask, mask_cache=None, indices=None, height=0, width=0, fill_value=114, **params):
-        mask_batch = []
-        for i in indices:
-            if i == 0:
-                mask_batch.append(mask)
-            else:
-                mask_batch.append(mask_cache[i - 1])
-        return F.mosaic4(mask_batch, height, width, fill_value)
+    def apply_to_mask(self, mask, mask_cache=None, height=0, width=0, fill_value=114, **params):
+        mask_cache.append(mask)
+        mask, *_ = F.mosaic4(mask_cache, height, width, fill_value)
+        return mask
 
-    def apply_to_bbox(self, bbox, image_shape=None, position=0, height=0, width=0, **params):
-        rows, cols = image_shape[:2]
-        return F.bbox_mosaic4(bbox, rows, cols, position, height, width)
+    def apply_to_bbox(self, bbox, padh=0, padw=0, height=0, width=0, **params):
+        return F.bbox_mosaic4(bbox, padh, padw, height, width)
 
     def apply_to_bboxes(
             self,
             bboxes,
             bboxes_cache=None,
-            image=None,
-            image_cache=None,
-            indices=None,
             height=0,
             width=0,
-            bboxes_format=None,
             **params
     ):
+        bboxes_cache.append(bboxes)
         new_bboxes = []
-        for i, index in enumerate(indices):
-            if index == 0:
-                image_shape = image.shape
-                target_bboxes = bboxes
-            else:
-                image_shape = image_cache[index - 1].shape
-                target_bboxes = bboxes_cache[index - 1]
-                # rows, cols = image_shape[:2]
-                # target_bboxes = convert_bboxes_to_albumentations(
-                #     target_bboxes, source_format=bboxes_format, rows=rows, cols=cols
-                # )
-            for bbox in target_bboxes:
-                new_bbox = self.apply_to_bbox(bbox, image_shape, i, height, width)
+        self.new_classes = []
+        for bbox, classes, padh, padw in zip(bboxes_cache, self.classes_cache, self.padh_cache, self.padw_cache, ):
+            for box, cls in zip(bbox, classes):
+                new_bbox = self.apply_to_bbox(box, padh, padw, height, width)
                 new_bboxes.append(new_bbox)
+                self.new_classes.append(cls)
         return new_bboxes
 
     def apply_to_keypoint(self, **params):
         pass  # TODO
 
     def get_params(self) -> Dict[str, Any]:
-        image_cache = self.target_dependence["image"]["image_cache"]
-        n = len(image_cache)
-        indices = 1 + np.random.choice(
-            range(n), size=3, replace=self.replace
-        )  # 3 additional image indices. The 0-th index is reserved for the target image.
-        indices = [0] + list(indices)
-        random.shuffle(indices)  # target image + additional images
         return {
-            "indices": indices,
             "height": self.height,
             "width": self.width,
             "fill_value": self.fill_value,
-            "bboxes_format": self.bboxes_format,
         }
+
+    def apply_with_params(self, params: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+        self.classes_cache = kwargs['classes_cache']
+        self.classes_cache.append(kwargs['classes'])
+        res = super(Mosaic, self).apply_with_params(params, **kwargs)
+        res['classes'] = self.new_classes
+        return res

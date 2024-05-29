@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 from typing import Sequence, Tuple, List
 from albumentations.core.bbox_utils import denormalize_bbox, normalize_bbox
+import random
 
 
 def shift_scale_rotate_matrix(
@@ -76,7 +77,7 @@ def resize_boxes(boxes, original_size, new_size):
     return resize_boxes_ratio(boxes, ratio_height, ratio_width)
 
 
-def mosaic4(image_batch: List[np.ndarray], height: int, width: int, fill_value: int = 0) -> np.ndarray:
+def mosaic4(image_batch: List[np.ndarray], height: int, width: int, fill_value: int = 0):
     """Arrange the images in a 2x2 grid. Images can have different shape.
     This implementation is based on YOLOv5 with some modification:
     https://github.com/ultralytics/yolov5/blob/932dc78496ca532a41780335468589ad7f0147f7/utils/datasets.py#L648
@@ -91,59 +92,35 @@ def mosaic4(image_batch: List[np.ndarray], height: int, width: int, fill_value: 
     if len(image_batch) != 4:
         raise ValueError(f"Length of image_batch should be 4. Got {len(image_batch)}")
 
-    if len(image_batch[0].shape) == 2:
-        out_shape = [height, width]
-    else:
-        out_shape = [height, width, image_batch[0].shape[2]]
-
-    center_x = width // 2
-    center_y = height // 2
-    img4 = np.full(out_shape, fill_value, dtype=np.uint8)  # base image with 4 tiles
+    mosaic_border = [-height // 2, -width // 2]
+    yc, xc = (int(random.uniform(-x, 2 * y + x)) for x, y in zip(mosaic_border, [height, width]))
+    img4 = np.full((height * 2, width * 2, 3), fill_value, dtype=np.uint8)  # base image with 4 tiles
+    padw_cache = []
+    padh_cache = []
     for i, img in enumerate(image_batch):
         (h, w) = img.shape[:2]
 
-        # place img in img4
-        # this based on the yolo5's implementation
-        #
         if i == 0:  # top left
-            x1a, y1a, x2a, y2a = (
-                max(center_x - w, 0),
-                max(center_y - h, 0),
-                center_x,
-                center_y,
-            )  # xmin, ymin, xmax, ymax (large image)
+            x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc  # xmin, ymin, xmax, ymax (large image)
             x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
         elif i == 1:  # top right
-            x1a, y1a, x2a, y2a = (
-                center_x,
-                max(center_y - h, 0),
-                min(center_x + w, width),
-                center_y,
-            )
+            x1a, y1a, x2a, y2a = xc, max(yc - h, 0), min(xc + w, width * 2), yc
             x1b, y1b, x2b, y2b = 0, h - (y2a - y1a), min(w, x2a - x1a), h
         elif i == 2:  # bottom left
-            x1a, y1a, x2a, y2a = (
-                max(center_x - w, 0),
-                center_y,
-                center_x,
-                min(height, center_y + h),
-            )
+            x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(height * 2, yc + h)
             x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
         elif i == 3:  # bottom right
-            x1a, y1a, x2a, y2a = (
-                center_x,
-                center_y,
-                min(center_x + w, width),
-                min(height, center_y + h),
-            )
+            x1a, y1a, x2a, y2a = xc, yc, min(xc + w, width * 2), min(height * 2, yc + h)
             x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
 
         img4[y1a:y2a, x1a:x2a] = img[y1b:y2b, x1b:x2b]  # img4[ymin:ymax, xmin:xmax]
+        padw_cache.append(x1a - x1b)
+        padh_cache.append(y1a - y1b)
 
-    return img4
+    return img4, padh_cache, padw_cache
 
 
-def bbox_mosaic4(bbox: Tuple, rows: int, cols: int, position_index: int, height: int, width: int):
+def bbox_mosaic4(bbox: Tuple, padh: int, padw: int, height: int, width: int):
     """Put the given bbox in one of the cells of the 2x2 grid.
     Args:
         bbox (tuple): A bounding box `(x_min, y_min, x_max, y_max)` or `(x_min, y_min, x_max, y_max, label, ...)`.
@@ -153,28 +130,13 @@ def bbox_mosaic4(bbox: Tuple, rows: int, cols: int, position_index: int, height:
         height (int): Height of output mosaic image
         width (int): Width of output mosaic image
     """
-    bbox = denormalize_bbox(bbox, rows, cols)
-    bbox, tail = bbox[:4], tuple(bbox[4:])
-    center_x = width // 2
-    center_y = height // 2
-    if position_index == 0:  # top left
-        shift_x = center_x - cols
-        shift_y = center_y - rows
-    elif position_index == 1:  # top right
-        shift_x = center_x
-        shift_y = center_y - rows
-    elif position_index == 2:  # bottom left
-        shift_x = center_x - cols
-        shift_y = center_y
-    elif position_index == 3:  # bottom right
-        shift_x = center_x
-        shift_y = center_y
+    # bbox = denormalize_bbox(bbox, height, width)
+    xmin, ymin, xmax, ymax = bbox[:4]
     bbox = (
-        bbox[0] + shift_x,
-        bbox[1] + shift_y,
-        bbox[2] + shift_x,
-        bbox[3] + shift_y,
+        max(xmin + padw, 0),
+        max(ymin + padh, 0),
+        min(xmax + padw, 2 * width),
+        min(ymax + padh, 2 * height),
     )
-
     # bbox = normalize_bbox(bbox, height, width)
-    return tuple(bbox + tail)
+    return bbox
