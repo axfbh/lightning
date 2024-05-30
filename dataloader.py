@@ -15,8 +15,9 @@ from albumentations.pytorch import ToTensorV2
 
 from ops.dataset.voc_dataset import VOCDetection
 from ops.dataset.utils import detect_collate_fn
-from ops.augmentations.geometric.transforms import RandomShiftScaleRotate, Mosaic
+from ops.augmentations.geometric.transforms import RandomShiftScaleRotate
 from ops.augmentations.geometric.resize import ResizeShortLongest
+from ops.augmentations.transforms import Mosaic
 from ops.utils.logging import colorstr
 from ops.utils.torch_utils import torch_distributed_zero_first
 import ops.cv.io as io
