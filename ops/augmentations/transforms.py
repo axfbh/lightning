@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 from albumentations.core.transforms_interface import ImageOnlyTransform
 import ops.augmentations.functional as F
+import ops.cv.io as io
 
 
 class SaltPepperNoise(ImageOnlyTransform):
@@ -55,9 +56,9 @@ class SaltPepperNoise(ImageOnlyTransform):
 
     def apply(self, image: np.ndarray, bboxes=None, **params):
         h, w = image.shape[:2]
-        salience_area = F.cal_salience_area(bboxes) if self.salience else np.array([-1, -1, -1, -1])
+        salience_area = F.bbox_salience_area(bboxes) if self.salience else np.array([-1, -1, -1, -1])
 
-        noise_image, noise_mask = F.cal_salience_salt_pepper_noise(image, salience_area, self.n, self.color)
+        noise_image, noise_mask = F.bbox_salience_salt_pepper_noise(image, salience_area, self.n, self.color)
 
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self.noise_scale, self.noise_scale))
         noise_mask = cv2.dilate(noise_mask, kernel)
@@ -69,17 +70,18 @@ class SaltPepperNoise(ImageOnlyTransform):
     def get_transform_init_args_names(self):
         return "color", "n", "noise_scale", "border_scale", "saline"
 
-# if __name__ == '__main__':
-#     image = io.imread(r"D:\cgm\dataset\VOC2007\JPEGImages\000005.jpg")
-#     print(image.shape)
-#     for _ in range(5):
-#         x0, y0, x1, y1 = 25, 12, 430, 310
-#
-#         var = SaltPepperNoise(p=1, salience=True, border_scale=0)(image=image,
-#                                                                   bboxes=np.array([[x0, y0, x1, y1]], dtype=float))
-#         var1 = cv2.rectangle(var['image'].copy(),
-#                              var['bboxes'][0, [0, 1]].astype(int),
-#                              var['bboxes'][0, [2, 3]].astype(int),
-#                              (255, 255, 0), 1)
-#         print(var1.shape)
-#         io.show('ad', var1)
+
+if __name__ == '__main__':
+    image = io.imread(r"D:\cgm\dataset\VOC2007\JPEGImages\000005.jpg")
+    print(image.shape)
+    for _ in range(5):
+        x0, y0, x1, y1 = 25, 12, 430, 310
+
+        var = SaltPepperNoise(p=1, salience=True, border_scale=0)(image=image,
+                                                                  bboxes=np.array([[x0, y0, x1, y1]], dtype=float))
+        var1 = cv2.rectangle(var['image'].copy(),
+                             var['bboxes'][0, [0, 1]].astype(int),
+                             var['bboxes'][0, [2, 3]].astype(int),
+                             (255, 255, 0), 1)
+        print(var1.shape)
+        io.show('ad', var1)

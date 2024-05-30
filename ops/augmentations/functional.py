@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def cal_salience_salt_pepper_noise(image, salience_area, n, color):
+def bbox_salience_salt_pepper_noise(image, salience_area, n, color):
     x0, y0, x1, y1 = salience_area
     h, w = image.shape[:2]
     noise_mask = np.zeros((h, w))
@@ -17,7 +17,7 @@ def cal_salience_salt_pepper_noise(image, salience_area, n, color):
     return noise_image, noise_mask
 
 
-def cal_salience_area(bboxes: np.ndarray):
+def bbox_salience_area(bboxes: np.ndarray):
     xmin, ymin = bboxes[:, :2].min(0)
     xmax, ymax = bboxes[:, 2:].max(0)
     return xmin, ymin, xmax, ymax

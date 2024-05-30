@@ -18,5 +18,9 @@ global_step :  optimizer step times
 
 
 
-# lightning 的 loss / accumulate ，影响收敛
+# lightning 的 loss / accumulate ，影响收敛，因此需要下述代码乘回去
 return loss * self.trainer.accumulate_grad_batches
+
+
+# 分布式的时候 loss * world_size，增加收敛速度
+loss * self.trainer.accumulate_grad_batches * self.trainer.world_size
