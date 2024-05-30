@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 from torchvision.ops.boxes import box_iou
-from utils.nms import non_max_suppression
 from torchvision.ops.boxes import box_convert
 
 
@@ -172,7 +171,7 @@ def ap_per_class(tp, conf, pred_cls, target_cls, eps=1e-16):
 
 
 class MeanAveragePrecision:
-    def __init__(self, device, conf_thres=0.001, iou_thres=0.6, max_det=300, single_cls=False):
+    def __init__(self, device, single_cls=False):
         # to count the correct predictions
         self.stats = []
 
@@ -182,17 +181,9 @@ class MeanAveragePrecision:
         self.iouv = torch.linspace(0.5, 0.95, 10, device=self.device)  # iou vector for mAP@0.5:0.95
         self.niou = self.iouv.numel()
 
-        self.max_det = max_det
-        self.iou_thres = iou_thres
-        self.conf_thres = conf_thres
         self.single_cls = single_cls
 
     def update(self, preds, targets):
-        preds = non_max_suppression(preds, self.conf_thres, self.iou_thres,
-                                    labels=[],
-                                    max_det=self.max_det,
-                                    multi_label=False,
-                                    agnostic=False)
         for si, pred in enumerate(preds):
             labels = targets[targets[:, 0] == si, 1:].clone()
             labels[:, 0] = labels[:, 0] - 1

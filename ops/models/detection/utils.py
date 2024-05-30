@@ -5,7 +5,7 @@ import torch
 from torch import Tensor
 from ops.metric.DetectionMetric import MeanAveragePrecision
 from ops.utils.torch_utils import ModelEMA, smart_optimizer, smart_scheduler
-
+from utils.nms import non_max_suppression
 from lightning import LightningModule
 
 
@@ -39,8 +39,14 @@ class Yolo(LightningModule):
         preds, train_out = self.ema_model(images)
 
         loss = self.compute_loss(train_out, targets, shape)[1]  # box, obj, cls
-
         if not self.trainer.sanity_checking:
+            preds = non_max_suppression(preds,
+                                        0.001,
+                                        0.6,
+                                        labels=[],
+                                        max_det=300,
+                                        multi_label=False,
+                                        agnostic=False)
             self.map_metric.update(preds, targets)
         return loss
 
@@ -62,7 +68,7 @@ class Yolo(LightningModule):
             self.map_metric.reset()
 
     def configure_model(self) -> None:
-        self.map_metric = MeanAveragePrecision(device=self.device, conf_thres=0.001, iou_thres=0.6, max_det=300)
+        self.map_metric = MeanAveragePrecision(device=self.device)
 
     def configure_optimizers(self):
         optimizer = smart_optimizer(self,
