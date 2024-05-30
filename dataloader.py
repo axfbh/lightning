@@ -74,7 +74,8 @@ class MyDataSet(VOCDetection):
         classes_cache = [None for _ in range(3)]
         for i, index in enumerate(indices):
             image, bboxes, classes = super().__getitem__(index)
-            image_cache[i], bboxes_cache[i], classes_cache[i] = self.resize(image=image, bboxes=bboxes, classes=classes).values()
+            image_cache[i], bboxes_cache[i], classes_cache[i] = self.resize(image=image, bboxes=bboxes,
+                                                                            classes=classes).values()
         return image_cache, bboxes_cache, classes_cache
 
     def __getitem__(self, item):
@@ -126,31 +127,21 @@ def create_dataloader(path,
                       workers=3,
                       shuffle=False,
                       persistent_workers=False):
-    random_affine = RandomShiftScaleRotate(
-        scale_limit=(1 - hyp.scale, 1 + hyp.scale),
-        shift_limit_x=(0.5 - hyp.translate, 0.5 + hyp.translate),
-        shift_limit_y=(0.5 - hyp.translate, 0.5 + hyp.translate),
-        rotate_limit=(0, 0),
-        border_mode=cv2.BORDER_CONSTANT,
-        value=(114, 114, 114),
-        position=RandomShiftScaleRotate.PositionType.TOP_LEFT,
-        always_apply=True)
-
     mosaic_aug = A.Compose([
         Mosaic(height=image_size[0] * 2, width=image_size[1] * 2, fill_value=114, always_apply=True),
-        random_affine,
-        A.Crop(x_max=image_size[0], y_max=image_size[1], always_apply=True),
-        A.HueSaturationValue(always_apply=True),
-        A.Blur(p=0.01),
-        A.MedianBlur(p=0.01),
-        A.ToGray(p=0.01),
-        A.CLAHE(p=0.01),
-        A.HorizontalFlip(p=hyp.fliplr),
-        A.VerticalFlip(p=hyp.flipud),
     ], A.BboxParams(format='pascal_voc', label_fields=['classes'], min_visibility=0.2))
 
     transform = A.Compose([
-        random_affine,
+        RandomShiftScaleRotate(
+            scale_limit=(1 - hyp.scale, 1 + hyp.scale),
+            shift_limit_x=(0.5 - hyp.translate, 0.5 + hyp.translate),
+            shift_limit_y=(0.5 - hyp.translate, 0.5 + hyp.translate),
+            rotate_limit=(0, 0),
+            border_mode=cv2.BORDER_CONSTANT,
+            value=(114, 114, 114),
+            position=RandomShiftScaleRotate.PositionType.TOP_LEFT,
+            always_apply=True),
+        A.Crop(x_max=image_size[0], y_max=image_size[1], always_apply=True),
         A.HueSaturationValue(always_apply=True),
         A.Blur(p=0.01),
         A.MedianBlur(p=0.01),
