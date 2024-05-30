@@ -1,6 +1,5 @@
 import os
 import math
-import numpy as np
 import random
 
 import cv2
@@ -16,7 +15,8 @@ from albumentations.pytorch import ToTensorV2
 
 from ops.dataset.voc_dataset import VOCDetection
 from ops.dataset.utils import detect_collate_fn
-from ops.augmentations.transforms import ResizeShortLongest, RandomShiftScaleRotate, Mosaic
+from ops.augmentations.geometric.transforms import RandomShiftScaleRotate, Mosaic
+from ops.augmentations.geometric.resize import ResizeShortLongest
 from ops.utils.logging import colorstr
 from ops.utils.torch_utils import torch_distributed_zero_first
 import ops.cv.io as io
@@ -32,7 +32,7 @@ class MyDataSet(VOCDetection):
         self.aug_mosaic = aug_mosaic
 
         self.resize = A.Compose([
-            ResizeShortLongest(self.image_size, always_apply=True),
+            ResizeShortLongest(min_size=self.image_size[0], max_size=self.image_size[1], always_apply=True),
         ], A.BboxParams(format='pascal_voc', label_fields=['classes']))
         self.padding = A.Compose([
             A.PadIfNeeded(
