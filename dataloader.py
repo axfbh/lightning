@@ -73,7 +73,8 @@ class MyDataSet(VOCDetection):
         bboxes_cache = [None for _ in range(3)]
         classes_cache = [None for _ in range(3)]
         for i, index in enumerate(indices):
-            image_cache[i], bboxes_cache[i], classes_cache[i] = super().__getitem__(index)
+            image, bboxes, classes = super().__getitem__(index)
+            image_cache[i], bboxes_cache[i], classes_cache[i] = self.resize(image=image, bboxes=bboxes, classes=classes).values()
         return image_cache, bboxes_cache, classes_cache
 
     def __getitem__(self, item):
@@ -88,10 +89,10 @@ class MyDataSet(VOCDetection):
                                      image_cache=image_cache,
                                      bboxes_cache=bboxes_cache,
                                      classes_cache=classes_cache)
-            io.visualize(cv2.cvtColor(sample['image'], cv2.COLOR_RGB2BGR),
-                         np.array(sample['bboxes']),
-                         sample['classes'],
-                         self.id2name)
+            # io.visualize(cv2.cvtColor(sample['image'], cv2.COLOR_RGB2BGR),
+            #              np.array(sample['bboxes']),
+            #              sample['classes'],
+            #              self.id2name)
         else:
             sample = self.resize(image=image, bboxes=bboxes, classes=classes)
             sample = self.padding(**sample)
