@@ -18,34 +18,10 @@ from ops.dataset.voc_dataset import VOCDetection
 from ops.dataset.utils import detect_collate_fn
 from ops.augmentations.transforms import ResizeShortLongest, RandomShiftScaleRotate, Mosaic
 from ops.utils.logging import colorstr
-from utils.utils import box_candidates
 from ops.utils.torch_utils import torch_distributed_zero_first
 import ops.cv.io as io
 
 PIN_MEMORY = str(os.getenv("PIN_MEMORY", True)).lower() == "true"  # global pin_memory for dataloaders
-
-
-# def seed_worker(worker_id):
-#     # Set dataloader worker seed https://pytorch.org/docs/stable/notes/randomness.html#dataloader
-#     worker_seed = torch.initial_seed() % 2 ** 32
-#     np.random.seed(worker_seed)
-#     random.seed(worker_seed)
-#
-#
-# def augment_hsv(im, hgain=0.5, sgain=0.5, vgain=0.5):
-#     # HSV color-space augmentation
-#     if hgain or sgain or vgain:
-#         r = np.random.uniform(-1, 1, 3) * [hgain, sgain, vgain] + 1  # random gains
-#         hue, sat, val = cv2.split(cv2.cvtColor(im, cv2.COLOR_RGB2HSV))
-#         dtype = im.dtype  # uint8
-#
-#         x = np.arange(0, 256, dtype=r.dtype)
-#         lut_hue = ((x * r[0]) % 180).astype(dtype)
-#         lut_sat = np.clip(x * r[1], 0, 255).astype(dtype)
-#         lut_val = np.clip(x * r[2], 0, 255).astype(dtype)
-#
-#         im_hsv = cv2.merge((cv2.LUT(hue, lut_hue), cv2.LUT(sat, lut_sat), cv2.LUT(val, lut_val)))
-#         cv2.cvtColor(im_hsv, cv2.COLOR_HSV2RGB, dst=im)  # no return needed
 
 
 class MyDataSet(VOCDetection):
@@ -80,13 +56,13 @@ class MyDataSet(VOCDetection):
 
     def __getitem__(self, item):
         image, bboxes, classes = super().__getitem__(item)
+        sample = self.resize(image=image, bboxes=bboxes, classes=classes)
+
         mosaic = random.random() < self.mosaic and self.augment
 
         if mosaic:
             image_cache, bboxes_cache, classes_cache = self._update_image_cache()
-            sample = self.mosaic_aug(image=image,
-                                     bboxes=bboxes,
-                                     classes=classes,
+            sample = self.mosaic_aug(**sample,
                                      image_cache=image_cache,
                                      bboxes_cache=bboxes_cache,
                                      classes_cache=classes_cache)
@@ -95,12 +71,11 @@ class MyDataSet(VOCDetection):
             #              sample['classes'],
             #              self.id2name)
         else:
-            sample = self.resize(image=image, bboxes=bboxes, classes=classes)
             sample = self.padding(**sample)
 
-            if self.augment:
-                sample = self.transform(**sample)
-            # io.visualize(sample['image'], sample['bboxes'], sample['classes'], self.id2name)
+        if self.augment:
+            sample = self.transform(**sample)
+        # io.visualize(sample['image'], sample['bboxes'], sample['classes'], self.id2name)
 
         image = ToTensorV2()(image=sample['image'])['image'].float()
         bboxes = torch.FloatTensor(sample['bboxes'])
