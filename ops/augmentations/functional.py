@@ -131,12 +131,11 @@ def bbox_mosaic4(bbox: Tuple, padh: int, padw: int, height: int, width: int):
         width (int): Width of output mosaic image
     """
     # bbox = denormalize_bbox(bbox, height, width)
-    xmin, ymin, xmax, ymax = bbox[:4]
+    bbox, tail = bbox[:4], tuple(bbox[4:])
     bbox = (
-        max(xmin + padw, 0),
-        max(ymin + padh, 0),
-        min(xmax + padw, 2 * width),
-        min(ymax + padh, 2 * height),
+        max(bbox[0] + padw, 0),
+        max(bbox[1] + padh, 0),
+        min(bbox[2] + padw, width),
+        min(bbox[3] + padh, height),
     )
-    # bbox = normalize_bbox(bbox, height, width)
-    return bbox
+    return tuple(bbox + tail)

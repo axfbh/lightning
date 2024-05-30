@@ -6,8 +6,7 @@ import numpy as np
 
 import cv2
 from albumentations import DualTransform
-from albumentations.core.bbox_utils import convert_bboxes_to_albumentations
-
+from albumentations.core.bbox_utils import denormalize_bbox, normalize_bbox
 import ops.augmentations.functional as F
 
 
@@ -234,7 +233,8 @@ class Mosaic(DualTransform):
         if "mask" in kwargs:
             self.target_dependence["mask"] = {"mask_cache": kwargs["mask_cache"]}
         if "bboxes" in kwargs:
-            self.target_dependence["bboxes"] = {"bboxes_cache": kwargs["bboxes_cache"]}
+            self.target_dependence["bboxes"] = {"bboxes_cache": kwargs["bboxes_cache"],
+                                                "classes_cache": kwargs['classes_cache']}
 
     def apply(self, image, image_cache=None, height=0, width=0, fill_value=114, **params):
         image_cache.append(image)
@@ -247,24 +247,32 @@ class Mosaic(DualTransform):
         return mask
 
     def apply_to_bbox(self, bbox, padh=0, padw=0, height=0, width=0, **params):
-        return F.bbox_mosaic4(bbox, padh, padw, height, width)
+        return F.bbox_mosaic4(bbox, padh, padw, height * 2, width * 2)
 
     def apply_to_bboxes(
             self,
             bboxes,
             bboxes_cache=None,
+            classes_cache=None,
             height=0,
             width=0,
             **params
     ):
-        bboxes_cache.append(bboxes)
         new_bboxes = []
-        self.new_classes = []
-        for bbox, classes, padh, padw in zip(bboxes_cache, self.classes_cache, self.padh_cache, self.padw_cache, ):
+        padh1, padw1 = self.padh_cache.pop(-1), self.padw_cache.pop(-1)
+
+        for bbox, classes, padh, padw in zip(bboxes_cache, classes_cache, self.padh_cache, self.padw_cache):
             for box, cls in zip(bbox, classes):
-                new_bbox = self.apply_to_bbox(box, padh, padw, height, width)
+                new_bbox = self.apply_to_bbox(tuple(tuple(box) + tuple([cls])), padh, padw, height, width)
+                new_bbox = normalize_bbox(new_bbox, height * 2, width * 2)
                 new_bboxes.append(new_bbox)
-                self.new_classes.append(cls)
+
+        for box in bboxes:
+            box = denormalize_bbox(box, params['rows'], params['cols'])
+            new_bbox = self.apply_to_bbox(box, padh1, padw1, height, width)
+            new_bbox = normalize_bbox(new_bbox, height * 2, width * 2)
+            new_bboxes.append(new_bbox)
+
         return new_bboxes
 
     def apply_to_keypoint(self, **params):
@@ -276,10 +284,3 @@ class Mosaic(DualTransform):
             "width": self.width,
             "fill_value": self.fill_value,
         }
-
-    def apply_with_params(self, params: Dict[str, Any], **kwargs) -> Dict[str, Any]:
-        self.classes_cache = kwargs['classes_cache']
-        self.classes_cache.append(kwargs['classes'])
-        res = super(Mosaic, self).apply_with_params(params, **kwargs)
-        res['classes'] = self.new_classes
-        return res

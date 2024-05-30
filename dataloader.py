@@ -16,7 +16,7 @@ from albumentations.pytorch import ToTensorV2
 
 from ops.dataset.voc_dataset import VOCDetection
 from ops.dataset.utils import detect_collate_fn
-from ops.augmentations.transforms import ResizeShortLongest, RandomShiftScaleRotate
+from ops.augmentations.transforms import ResizeShortLongest, RandomShiftScaleRotate, Mosaic
 from ops.utils.logging import colorstr
 from utils.utils import box_candidates
 from ops.utils.torch_utils import torch_distributed_zero_first
@@ -66,61 +66,81 @@ class MyDataSet(VOCDetection):
                 border_mode=cv2.BORDER_CONSTANT, value=(114, 114, 114))
         ], A.BboxParams(format='pascal_voc', label_fields=['classes']))
 
-    def load_mosaic(self, item):
-        bboxes4, classes4, segments4 = [], [], []
-        indices = [item] + random.choices(range(len(self.img_ids)), k=3)  # 3 additional image indices
-        random.shuffle(indices)
-        height, width = self.image_size
-        mosaic_border = [-height // 2, -width // 2]
-
-        yc, xc = (int(random.uniform(-x, 2 * y + x)) for x, y in zip(mosaic_border, [height, width]))
-        img4 = np.full((height * 2, width * 2, 3), 114, dtype=np.uint8)  # base image with 4 tiles
-        for i, index in enumerate(indices):
-            image, bboxes, classes = super().__getitem__(index)
-            sample = self.resize(image=image, bboxes=bboxes, classes=classes)
-            image, bboxes, classes = sample['image'], np.array(sample['bboxes']), np.array(sample['classes'], dtype=int)
-            nt = len(bboxes)
-            (h, w) = image.shape[:2]
-
-            if i == 0:  # top left
-                x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc  # xmin, ymin, xmax, ymax (large image)
-                x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
-            elif i == 1:  # top right
-                x1a, y1a, x2a, y2a = xc, max(yc - h, 0), min(xc + w, width * 2), yc
-                x1b, y1b, x2b, y2b = 0, h - (y2a - y1a), min(w, x2a - x1a), h
-            elif i == 2:  # bottom left
-                x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(height * 2, yc + h)
-                x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
-            elif i == 3:  # bottom right
-                x1a, y1a, x2a, y2a = xc, yc, min(xc + w, width * 2), min(height * 2, yc + h)
-                x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
-
-            img4[y1a:y2a, x1a:x2a] = image[y1b:y2b, x1b:x2b]  # img4[ymin:ymax, xmin:xmax]
-            padw = x1a - x1b
-            padh = y1a - y1b
-
-            if nt:
-                prev_bboxes = bboxes.copy()
-                bboxes[:, [0, 2]] = np.clip(bboxes[:, [0, 2]] + padw, 0, 2 * width)
-                bboxes[:, [1, 3]] = np.clip(bboxes[:, [1, 3]] + padh, 0, 2 * height)
-                j = box_candidates(prev_bboxes.T, bboxes.T, area_thr=0.01)
-                bboxes, classes = bboxes[j], classes[j]
-
-                bboxes4.append(bboxes)
-                classes4.extend(classes.tolist())
-
-        if len(bboxes4):
-            bboxes4 = np.concatenate(bboxes4, 0)
-        sample = self.mosaic_aug(image=img4, bboxes=bboxes4, classes=classes4)
-        return sample
+    # def load_mosaic(self, item):
+    #     bboxes4, classes4, segments4 = [], [], []
+    #     indices = [item] + random.choices(range(len(self.img_ids)), k=3)  # 3 additional image indices
+    #     random.shuffle(indices)
+    #     height, width = self.image_size
+    #     mosaic_border = [-height // 2, -width // 2]
+    #
+    #     yc, xc = (int(random.uniform(-x, 2 * y + x)) for x, y in zip(mosaic_border, [height, width]))
+    #     img4 = np.full((height * 2, width * 2, 3), 114, dtype=np.uint8)  # base image with 4 tiles
+    #     for i, index in enumerate(indices):
+    #         image, bboxes, classes = super().__getitem__(index)
+    #         sample = self.resize(image=image, bboxes=bboxes, classes=classes)
+    #         image, bboxes, classes = sample['image'], np.array(sample['bboxes']), np.array(sample['classes'], dtype=int)
+    #         nt = len(bboxes)
+    #         (h, w) = image.shape[:2]
+    #
+    #         if i == 0:  # top left
+    #             x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc  # xmin, ymin, xmax, ymax (large image)
+    #             x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
+    #         elif i == 1:  # top right
+    #             x1a, y1a, x2a, y2a = xc, max(yc - h, 0), min(xc + w, width * 2), yc
+    #             x1b, y1b, x2b, y2b = 0, h - (y2a - y1a), min(w, x2a - x1a), h
+    #         elif i == 2:  # bottom left
+    #             x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(height * 2, yc + h)
+    #             x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
+    #         elif i == 3:  # bottom right
+    #             x1a, y1a, x2a, y2a = xc, yc, min(xc + w, width * 2), min(height * 2, yc + h)
+    #             x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
+    #
+    #         img4[y1a:y2a, x1a:x2a] = image[y1b:y2b, x1b:x2b]  # img4[ymin:ymax, xmin:xmax]
+    #         padw = x1a - x1b
+    #         padh = y1a - y1b
+    #
+    #         if nt:
+    #             prev_bboxes = bboxes.copy()
+    #             bboxes[:, [0, 2]] = np.clip(bboxes[:, [0, 2]] + padw, 0, 2 * width)
+    #             bboxes[:, [1, 3]] = np.clip(bboxes[:, [1, 3]] + padh, 0, 2 * height)
+    #             j = box_candidates(prev_bboxes.T, bboxes.T, area_thr=0.01)
+    #             bboxes, classes = bboxes[j], classes[j]
+    #
+    #             bboxes4.append(bboxes)
+    #             classes4.extend(classes.tolist())
+    #
+    #     if len(bboxes4):
+    #         bboxes4 = np.concatenate(bboxes4, 0)
+    #     sample = self.mosaic_aug(image=img4, bboxes=bboxes4, classes=classes4)
+    #     return sample
 
     def __getitem__(self, item):
-        if random.random() < self.mosaic and self.augment:
-            sample = self.load_mosaic(item)
-            # io.visualize(cv2.cvtColor(sample['image'], cv2.COLOR_RGB2BGR),
-            #              sample['bboxes'],
-            #              sample['classes'],
-            #              self.id2name)
+        if random.random() < self.mosaic:
+            indices = random.choices(range(len(self.img_ids)), k=3)  # 3 additional image indices
+            random.shuffle(indices)
+            image_cache = [None for _ in range(3)]
+            bboxes_cache = [None for _ in range(3)]
+            classes_cache = [None for _ in range(3)]
+            image, bboxes, classes = super().__getitem__(item)
+            for i, index in enumerate(indices):
+                image_cache[i], bboxes_cache[i], classes_cache[i] = super().__getitem__(index)
+            sample = self.mosaic_aug(image=image,
+                                     bboxes=bboxes,
+                                     classes=classes,
+                                     image_cache=image_cache,
+                                     bboxes_cache=bboxes_cache,
+                                     classes_cache=classes_cache)
+            # sample = Mosaic(640, 640, 114, True)(image=image,
+            #                                      bboxes=bboxes,
+            #                                      classes=classes,
+            #                                      image_cache=image_cache,
+            #                                      bboxes_cache=bboxes_cache,
+            #                                      classes_cache=classes_cache)
+            # sample = self.load_mosaic(item)
+            io.visualize(cv2.cvtColor(sample['image'], cv2.COLOR_RGB2BGR),
+                         np.array(sample['bboxes']),
+                         sample['classes'],
+                         self.id2name)
         else:
             image, bboxes, classes = super().__getitem__(item)
             sample = self.resize(image=image, bboxes=bboxes, classes=classes)
@@ -156,17 +176,18 @@ def create_dataloader(path,
                       shuffle=False,
                       persistent_workers=False):
     mosaic_aug = A.Compose([
-        RandomShiftScaleRotate(
-            scale_limit=(1 - hyp.scale, 1 + hyp.scale),
-            shift_limit_x=(0.5 - hyp.translate, 0.5 + hyp.translate),
-            shift_limit_y=(0.5 - hyp.translate, 0.5 + hyp.translate),
-            rotate_limit=(0, 0),
-            border_mode=cv2.BORDER_CONSTANT,
-            value=(114, 114, 114),
-            position=RandomShiftScaleRotate.PositionType.TOP_LEFT,
-            always_apply=True),
-        A.Crop(x_max=640, y_max=640, always_apply=True)
-    ], A.BboxParams(format='pascal_voc', label_fields=['classes'], min_visibility=0.2))
+        Mosaic(height=640, width=640, fill_value=114, always_apply=True),
+        # RandomShiftScaleRotate(
+        #     scale_limit=(1 - hyp.scale, 1 + hyp.scale),
+        #     shift_limit_x=(0.5 - hyp.translate, 0.5 + hyp.translate),
+        #     shift_limit_y=(0.5 - hyp.translate, 0.5 + hyp.translate),
+        #     rotate_limit=(0, 0),
+        #     border_mode=cv2.BORDER_CONSTANT,
+        #     value=(114, 114, 114),
+        #     position=RandomShiftScaleRotate.PositionType.TOP_LEFT,
+        #     always_apply=True),
+        # A.Crop(x_max=640, y_max=640, always_apply=True)
+    ], A.BboxParams(format='pascal_voc', label_fields=['classes']))
 
     transform = A.Compose([
         RandomShiftScaleRotate(
