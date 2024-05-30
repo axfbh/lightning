@@ -25,11 +25,11 @@ PIN_MEMORY = str(os.getenv("PIN_MEMORY", True)).lower() == "true"  # global pin_
 
 
 class MyDataSet(VOCDetection):
-    def __init__(self, mosaic, mosaic_aug, *args, **kwargs):
+    def __init__(self, mosaic, aug_mosaic, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.mosaic = mosaic
-        self.mosaic_aug = mosaic_aug
+        self.aug_mosaic = aug_mosaic
 
         self.resize = A.Compose([
             ResizeShortLongest(self.image_size, always_apply=True),
@@ -62,20 +62,14 @@ class MyDataSet(VOCDetection):
 
         if mosaic:
             image_cache, bboxes_cache, classes_cache = self._update_image_cache()
-            sample = self.mosaic_aug(**sample,
+            sample = self.aug_mosaic(**sample,
                                      image_cache=image_cache,
                                      bboxes_cache=bboxes_cache,
                                      classes_cache=classes_cache)
-            # io.visualize(cv2.cvtColor(sample['image'], cv2.COLOR_RGB2BGR),
-            #              np.array(sample['bboxes']),
-            #              sample['classes'],
-            #              self.id2name)
-        else:
-            sample = self.padding(**sample)
+        sample = self.padding(**sample)
 
         if self.augment:
             sample = self.transform(**sample)
-        # io.visualize(sample['image'], sample['bboxes'], sample['classes'], self.id2name)
 
         image = ToTensorV2()(image=sample['image'])['image'].float()
         bboxes = torch.FloatTensor(sample['bboxes'])
@@ -102,7 +96,7 @@ def create_dataloader(path,
                       workers=3,
                       shuffle=False,
                       persistent_workers=False):
-    mosaic_aug = A.Compose([
+    aug_mosaic = A.Compose([
         Mosaic(height=image_size[0] * 2, width=image_size[1] * 2, fill_value=114, always_apply=True),
     ], A.BboxParams(format='pascal_voc', label_fields=['classes'], min_visibility=0.2))
 
@@ -131,7 +125,7 @@ def create_dataloader(path,
             f"{x}".replace("always_apply=False, ", "") for x in transform if x.p))
 
     dataset = MyDataSet(mosaic=hyp['mosaic'],
-                        mosaic_aug=mosaic_aug,
+                        aug_mosaic=aug_mosaic,
                         root_dir=path,
                         image_set=image_set,
                         image_size=image_size,
