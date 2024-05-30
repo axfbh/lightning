@@ -113,41 +113,38 @@ class MyDataSet(VOCDetection):
     #         bboxes4 = np.concatenate(bboxes4, 0)
     #     sample = self.mosaic_aug(image=img4, bboxes=bboxes4, classes=classes4)
     #     return sample
+    def _update_image_cache(self):
+        indices = random.choices(range(len(self.img_ids)), k=3)  # 3 additional image indices
+        random.shuffle(indices)
+        image_cache = [None for _ in range(3)]
+        bboxes_cache = [None for _ in range(3)]
+        classes_cache = [None for _ in range(3)]
+        for i, index in enumerate(indices):
+            image_cache[i], bboxes_cache[i], classes_cache[i] = super().__getitem__(index)
+        return image_cache, bboxes_cache, classes_cache
 
     def __getitem__(self, item):
-        if random.random() < self.mosaic:
-            indices = random.choices(range(len(self.img_ids)), k=3)  # 3 additional image indices
-            random.shuffle(indices)
-            image_cache = [None for _ in range(3)]
-            bboxes_cache = [None for _ in range(3)]
-            classes_cache = [None for _ in range(3)]
-            image, bboxes, classes = super().__getitem__(item)
-            for i, index in enumerate(indices):
-                image_cache[i], bboxes_cache[i], classes_cache[i] = super().__getitem__(index)
+        image, bboxes, classes = super().__getitem__(item)
+        mosaic = random.random() < self.mosaic and self.augment
+
+        if mosaic:
+            image_cache, bboxes_cache, classes_cache = self._update_image_cache()
             sample = self.mosaic_aug(image=image,
                                      bboxes=bboxes,
                                      classes=classes,
                                      image_cache=image_cache,
                                      bboxes_cache=bboxes_cache,
                                      classes_cache=classes_cache)
-            # sample = Mosaic(640, 640, 114, True)(image=image,
-            #                                      bboxes=bboxes,
-            #                                      classes=classes,
-            #                                      image_cache=image_cache,
-            #                                      bboxes_cache=bboxes_cache,
-            #                                      classes_cache=classes_cache)
-            # sample = self.load_mosaic(item)
             io.visualize(cv2.cvtColor(sample['image'], cv2.COLOR_RGB2BGR),
                          np.array(sample['bboxes']),
                          sample['classes'],
                          self.id2name)
         else:
-            image, bboxes, classes = super().__getitem__(item)
             sample = self.resize(image=image, bboxes=bboxes, classes=classes)
             sample = self.padding(**sample)
 
-        if self.augment:
-            sample = self.transform(**sample)
+            if self.augment:
+                sample = self.transform(**sample)
             # io.visualize(sample['image'], sample['bboxes'], sample['classes'], self.id2name)
 
         image = ToTensorV2()(image=sample['image'])['image'].float()
@@ -175,31 +172,20 @@ def create_dataloader(path,
                       workers=3,
                       shuffle=False,
                       persistent_workers=False):
-    mosaic_aug = A.Compose([
-        Mosaic(height=640, width=640, fill_value=114, always_apply=True),
-        # RandomShiftScaleRotate(
-        #     scale_limit=(1 - hyp.scale, 1 + hyp.scale),
-        #     shift_limit_x=(0.5 - hyp.translate, 0.5 + hyp.translate),
-        #     shift_limit_y=(0.5 - hyp.translate, 0.5 + hyp.translate),
-        #     rotate_limit=(0, 0),
-        #     border_mode=cv2.BORDER_CONSTANT,
-        #     value=(114, 114, 114),
-        #     position=RandomShiftScaleRotate.PositionType.TOP_LEFT,
-        #     always_apply=True),
-        # A.Crop(x_max=640, y_max=640, always_apply=True)
-    ], A.BboxParams(format='pascal_voc', label_fields=['classes']))
+    random_affine = RandomShiftScaleRotate(
+        scale_limit=(1 - hyp.scale, 1 + hyp.scale),
+        shift_limit_x=(0.5 - hyp.translate, 0.5 + hyp.translate),
+        shift_limit_y=(0.5 - hyp.translate, 0.5 + hyp.translate),
+        rotate_limit=(0, 0),
+        border_mode=cv2.BORDER_CONSTANT,
+        value=(114, 114, 114),
+        position=RandomShiftScaleRotate.PositionType.TOP_LEFT,
+        always_apply=True)
 
-    transform = A.Compose([
-        RandomShiftScaleRotate(
-            scale_limit=(1 - hyp.scale, 1 + hyp.scale),
-            shift_limit_x=(0.5 - hyp.translate, 0.5 + hyp.translate),
-            shift_limit_y=(0.5 - hyp.translate, 0.5 + hyp.translate),
-            rotate_limit=(0, 0),
-            border_mode=cv2.BORDER_CONSTANT,
-            value=(114, 114, 114),
-            position=RandomShiftScaleRotate.PositionType.TOP_LEFT,
-            always_apply=True
-        ),
+    mosaic_aug = A.Compose([
+        Mosaic(height=image_size[0] * 2, width=image_size[1] * 2, fill_value=114, always_apply=True),
+        random_affine,
+        A.Crop(x_max=image_size[0], y_max=image_size[1], always_apply=True),
         A.HueSaturationValue(always_apply=True),
         A.Blur(p=0.01),
         A.MedianBlur(p=0.01),
@@ -207,7 +193,18 @@ def create_dataloader(path,
         A.CLAHE(p=0.01),
         A.HorizontalFlip(p=hyp.fliplr),
         A.VerticalFlip(p=hyp.flipud),
-    ], A.BboxParams(format='pascal_voc', label_fields=['classes'], min_visibility=0.1))
+    ], A.BboxParams(format='pascal_voc', label_fields=['classes'], min_visibility=0.2))
+
+    transform = A.Compose([
+        random_affine,
+        A.HueSaturationValue(always_apply=True),
+        A.Blur(p=0.01),
+        A.MedianBlur(p=0.01),
+        A.ToGray(p=0.01),
+        A.CLAHE(p=0.01),
+        A.HorizontalFlip(p=hyp.fliplr),
+        A.VerticalFlip(p=hyp.flipud),
+    ], A.BboxParams(format='pascal_voc', label_fields=['classes'], min_visibility=0.2))
 
     if augment:
         rank_zero_info(f"{colorstr('albumentations: ')}" + ", ".join(

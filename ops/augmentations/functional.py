@@ -92,9 +92,9 @@ def mosaic4(image_batch: List[np.ndarray], height: int, width: int, fill_value: 
     if len(image_batch) != 4:
         raise ValueError(f"Length of image_batch should be 4. Got {len(image_batch)}")
 
-    mosaic_border = [-height // 2, -width // 2]
-    yc, xc = (int(random.uniform(-x, 2 * y + x)) for x, y in zip(mosaic_border, [height, width]))
-    img4 = np.full((height * 2, width * 2, 3), fill_value, dtype=np.uint8)  # base image with 4 tiles
+    mosaic_border = [-height // 4, -width // 4]
+    yc, xc = (int(random.uniform(-x, y + x)) for x, y in zip(mosaic_border, [height, width]))
+    img4 = np.full((height, width, 3), fill_value, dtype=np.uint8)  # base image with 4 tiles
     padw_cache = []
     padh_cache = []
     for i, img in enumerate(image_batch):
@@ -104,13 +104,13 @@ def mosaic4(image_batch: List[np.ndarray], height: int, width: int, fill_value: 
             x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc  # xmin, ymin, xmax, ymax (large image)
             x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
         elif i == 1:  # top right
-            x1a, y1a, x2a, y2a = xc, max(yc - h, 0), min(xc + w, width * 2), yc
+            x1a, y1a, x2a, y2a = xc, max(yc - h, 0), min(xc + w, width), yc
             x1b, y1b, x2b, y2b = 0, h - (y2a - y1a), min(w, x2a - x1a), h
         elif i == 2:  # bottom left
-            x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(height * 2, yc + h)
+            x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(height, yc + h)
             x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
         elif i == 3:  # bottom right
-            x1a, y1a, x2a, y2a = xc, yc, min(xc + w, width * 2), min(height * 2, yc + h)
+            x1a, y1a, x2a, y2a = xc, yc, min(xc + w, width), min(height, yc + h)
             x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
 
         img4[y1a:y2a, x1a:x2a] = img[y1b:y2b, x1b:x2b]  # img4[ymin:ymax, xmin:xmax]
