@@ -6,6 +6,7 @@ import numpy as np
 
 from torch.utils.data import Dataset
 import ops.cv.io as io
+from ops.dataset.utils import voc_bboxes_labels_from_yaml
 
 
 class VOCDetection(Dataset):
@@ -23,7 +24,7 @@ class VOCDetection(Dataset):
 
         self.image_size = image_size
 
-        self.cate = image_set.split('_')[0]
+        self.cate = None
 
         self.transform = transform
 
@@ -35,35 +36,14 @@ class VOCDetection(Dataset):
         else:
             img_ids_flag = [x.strip().split(' ') for x in self.img_ids]
             self.img_ids = [x[0] for x in img_ids_flag if x[1] != '-1']
+            self.cate = image_set.split('_')[0]
 
     def __len__(self):
         return len(self.img_ids) - (2 * 16)
 
-    def __annotations(self, img_id):
-        anno = ET.parse(self._annopath % img_id).getroot()
-        bboxes = []
-        classes = []
-        for obj in anno.iter("object"):
-            if obj.find('difficult').text == '0':
-                _box = obj.find("bndbox")
-                box = [
-                    _box.find("xmin").text,
-                    _box.find("ymin").text,
-                    _box.find("xmax").text,
-                    _box.find("ymax").text,
-                ]
-                name = obj.find("name").text.lower().strip()
-
-                if name == self.cate:
-                    bboxes.append(box)
-                    classes.append(self.name2id[name])
-
-        bboxes = np.array(bboxes, dtype=np.float32)
-        return bboxes, classes
-
     def __getitem__(self, idx):
         image = io.imread(self._imgpath % self.img_ids[idx])
 
-        bboxes, classes = self.__annotations(self.img_ids[idx])
+        bboxes, classes = voc_bboxes_labels_from_yaml(self._annopath % idx, self.cate, self.name2id)
 
         return image, bboxes, classes

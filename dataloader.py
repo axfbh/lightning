@@ -101,6 +101,9 @@ def create_dataloader(path,
         Mosaic(height=image_size[0] * 2, width=image_size[1] * 2, fill_value=114, always_apply=True),
     ], A.BboxParams(format='pascal_voc', label_fields=['classes'], min_visibility=0.2))
 
+    # A.MixUp()
+    # A.CoarseDropout() # CutOut
+
     transform = A.Compose([
         RandomShiftScaleRotate(
             scale_limit=(1 - hyp.scale, 1 + hyp.scale),
