@@ -95,16 +95,14 @@ def create_dataloader(path,
     image_paths, anno_paths, cate, name2id = voc_image_anno_paths(path, image_set, names)
     cache = DataCache(image_paths, anno_paths, voc_bboxes_labels_from_xml, cate, name2id)
 
-    resize = A.Compose([
-        ResizeShortLongest(min_size=image_size[0], max_size=image_size[1], always_apply=True),
-    ], A.BboxParams(format='pascal_voc', label_fields=['classes']))
-
     aug_mosaic = A.Compose([
         Mosaic(
             reference_data=cache,
             height=image_size[0] * 2,
             width=image_size[1] * 2,
-            read_fn=resize,
+            read_fn=A.Compose([
+                ResizeShortLongest(min_size=image_size[0], max_size=image_size[1], always_apply=True),
+            ], A.BboxParams(format='pascal_voc', label_fields=['classes'])),
             fill_value=114,
             always_apply=True),
     ], A.BboxParams(format='pascal_voc', label_fields=['classes'], min_visibility=0.2))

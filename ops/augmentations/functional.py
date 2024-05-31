@@ -25,13 +25,15 @@ def bbox_salience_area(bboxes: np.ndarray):
     return xmin, ymin, xmax, ymax
 
 
-def mosaic4(image_batch: List[np.ndarray], height: int, width: int, fill_value: int = 0):
+def mosaic4(image_batch: List[np.ndarray], x_center, y_center, height: int, width: int, fill_value: int = 0):
     """Arrange the images in a 2x2 grid. Images can have different shape.
     This implementation is based on YOLOv5 with some modification:
     https://github.com/ultralytics/yolov5/blob/932dc78496ca532a41780335468589ad7f0147f7/utils/datasets.py#L648
 
     Args:
         image_batch (List[np.ndarray]): image list. The length should be 4.
+        x_center The center of image x point.
+        y_center The center of image y point.
         height (int): Height of output mosaic image
         width (int): Width of output mosaic image
         fill_value (int): padding value
@@ -39,9 +41,7 @@ def mosaic4(image_batch: List[np.ndarray], height: int, width: int, fill_value: 
     """
     if len(image_batch) != 4:
         raise ValueError(f"Length of image_batch should be 4. Got {len(image_batch)}")
-
-    mosaic_border = [-height // 4, -width // 4]
-    yc, xc = (int(random.uniform(-x, y + x)) for x, y in zip(mosaic_border, [height, width]))
+    xc, yc = x_center, y_center
     img4 = np.full((height, width, 3), fill_value, dtype=np.uint8)  # base image with 4 tiles
     padw_cache = []
     padh_cache = []

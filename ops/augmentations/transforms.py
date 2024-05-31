@@ -1,9 +1,8 @@
-from typing import Dict, Any, Tuple, Optional, Union, Generator, Sequence, Callable
+from typing import Dict, Any, Tuple, Callable, Union
 import random
 import cv2
 import numpy as np
 
-import albumentations as A
 from albumentations import ImageOnlyTransform, DualTransform, BasicTransform, BaseCompose
 from albumentations.core.bbox_utils import denormalize_bbox, normalize_bbox
 
@@ -84,7 +83,7 @@ class Mosaic(DualTransform):
             self,
             height,
             width,
-            read_fn: Union[BasicTransform, BaseCompose],
+            read_fn: Union[BasicTransform, BaseCompose, Callable],
             reference_data,
             fill_value=0,
             always_apply=False,
@@ -100,15 +99,25 @@ class Mosaic(DualTransform):
         self.width = width
         self.fill_value = fill_value
 
-    def apply(self, image, mosaic_data=None, height=0, width=0, fill_value=114, **params):
+    def apply(self,
+              image,
+              mosaic_data=None,
+              x_center=0,
+              y_center=0,
+              height=0,
+              width=0,
+              fill_value=114,
+              **params):
         image_cache = [data['image'] for data in mosaic_data]
         image_cache.append(image)
-        image, self.padh_cache, self.padw_cache = F.mosaic4(image_cache, height, width, fill_value)
+        image, self.padh_cache, self.padw_cache = F.mosaic4(image_cache, x_center, y_center, height, width, fill_value)
         return image
 
     def apply_to_masks(self,
                        masks,
                        mosaic_data=None,
+                       x_center=0,
+                       y_center=0,
                        height=0,
                        width=0,
                        fill_value=114,
@@ -116,19 +125,18 @@ class Mosaic(DualTransform):
         # TODO
         mask_cache = [data['mask'] for data in mosaic_data]
         mask_cache.append(masks)
-        return F.mosaic4(mask_cache, height, width, fill_value)
+        return F.mosaic4(mask_cache, x_center, y_center, height, width, fill_value)
 
     def apply_to_bbox(self, bbox, padh=0, padw=0, height=0, width=0, **params):
         return F.bbox_mosaic4(bbox, padh, padw, height, width)
 
-    def apply_to_bboxes(
-            self,
-            bboxes,
-            mosaic_data=None,
-            height=0,
-            width=0,
-            **params
-    ):
+    def apply_to_bboxes(self,
+                        bboxes,
+                        mosaic_data=None,
+                        height=0,
+                        width=0,
+                        **params
+                        ):
         new_bboxes = []
         padh1, padw1 = self.padh_cache.pop(-1), self.padw_cache.pop(-1)
 
@@ -156,6 +164,8 @@ class Mosaic(DualTransform):
         mosaic_data = [self.read_fn(**self.reference_data[i]) for i in mosaic_idx]
 
         return {"mosaic_data": mosaic_data,
+                'x_center': int(random.uniform(self.height // 4, self.height - self.height // 4)),
+                'y_center': int(random.uniform(self.width // 4, self.width - self.width // 4)),
                 "height": self.height,
                 "width": self.width,
                 "fill_value": self.fill_value}
