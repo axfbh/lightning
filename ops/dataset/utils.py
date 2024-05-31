@@ -37,7 +37,7 @@ def detect_collate_fn(batch):
     return batched_imgs, batched_labels, torch.as_tensor(batched_imgs.shape[-2:])
 
 
-def voc_bboxes_labels_from_yaml(path, cate=None, name2id=None):
+def voc_bboxes_labels_from_xml(path, cate=None, name2id=None):
     anno = ET.parse(path).getroot()
     bboxes = []
     classes = []

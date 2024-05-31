@@ -6,7 +6,7 @@ import numpy as np
 
 from torch.utils.data import Dataset
 import ops.cv.io as io
-from ops.dataset.utils import voc_bboxes_labels_from_yaml
+from ops.dataset.utils import voc_bboxes_labels_from_xml
 
 
 class VOCDetection(Dataset):
@@ -44,6 +44,6 @@ class VOCDetection(Dataset):
     def __getitem__(self, idx):
         image = io.imread(self._imgpath % self.img_ids[idx])
 
-        bboxes, classes = voc_bboxes_labels_from_yaml(self._annopath % idx, self.cate, self.name2id)
+        bboxes, classes = voc_bboxes_labels_from_xml(self._annopath % self.img_ids[idx], self.cate, self.name2id)
 
         return image, bboxes, classes
