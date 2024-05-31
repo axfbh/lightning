@@ -1,49 +1,52 @@
-import torch
-import xml.etree.ElementTree as ET
 import os
+from typing import Dict
+import xml.etree.ElementTree as ET
 
 import numpy as np
 
-from torch.utils.data import Dataset
-import ops.cv.io as io
-from ops.dataset.utils import voc_bboxes_labels_from_xml
+
+def voc_image_anno_paths(root_dir, image_set, id2name: Dict):
+    _annopath = os.path.join(root_dir, "Annotations", "%s.xml")
+    _imgpath = os.path.join(root_dir, "JPEGImages", "%s.jpg")
+    _imgsetpath = os.path.join(root_dir, "ImageSets", "Main", "%s.txt")
+
+    name2id = dict(zip(id2name.values(), range(len(id2name))))
+
+    cate = None
+
+    with open(_imgsetpath % image_set) as f:
+        img_ids = f.readlines()
+
+    if image_set in ['train', 'trainval', 'val']:
+        image_path = [_imgpath % x.strip() for x in img_ids]
+        anno_path = [_annopath % x.strip() for x in img_ids]
+    else:
+        img_ids_flag = [x.strip().split(' ') for x in img_ids]
+        image_path = [_imgpath % x[0] for x in img_ids_flag if x[1] != '-1']
+        anno_path = [_annopath % x[0] for x in img_ids_flag if x[1] != '-1']
+        cate = image_set.split('_')[0]
+
+    return image_path, anno_path, cate, name2id
 
 
-class VOCDetection(Dataset):
+def voc_bboxes_labels_from_xml(path, cate=None, name2id=None) -> Dict:
+    anno = ET.parse(path).getroot()
+    bboxes = []
+    classes = []
+    for obj in anno.iter("object"):
+        if obj.find('difficult').text == '0':
+            _box = obj.find("bndbox")
+            box = [
+                _box.find("xmin").text,
+                _box.find("ymin").text,
+                _box.find("xmax").text,
+                _box.find("ymax").text,
+            ]
+            name = obj.find("name").text.lower().strip()
 
-    def __init__(self, root_dir, image_set, image_size, augment, class_name, transform=None):
-        super(VOCDetection, self).__init__()
+            if cate is None or name == cate:
+                bboxes.append(box)
+                classes.append(name if name2id is None else name2id[name])
 
-        self.augment = augment
-        self._annopath = os.path.join(root_dir, "Annotations", "%s.xml")
-        self._imgpath = os.path.join(root_dir, "JPEGImages", "%s.jpg")
-        self._imgsetpath = os.path.join(root_dir, "ImageSets", "Main", "%s.txt")
-
-        self.id2name = class_name
-        self.name2id = dict(zip(class_name.values(), range(len(class_name))))
-
-        self.image_size = image_size
-
-        self.cate = None
-
-        self.transform = transform
-
-        with open(self._imgsetpath % image_set) as f:
-            self.img_ids = f.readlines()
-
-        if image_set in ['train', 'trainval', 'val']:
-            self.img_ids = [x.strip() for x in self.img_ids]
-        else:
-            img_ids_flag = [x.strip().split(' ') for x in self.img_ids]
-            self.img_ids = [x[0] for x in img_ids_flag if x[1] != '-1']
-            self.cate = image_set.split('_')[0]
-
-    def __len__(self):
-        return len(self.img_ids) - (2 * 16)
-
-    def __getitem__(self, idx):
-        image = io.imread(self._imgpath % self.img_ids[idx])
-
-        bboxes, classes = voc_bboxes_labels_from_xml(self._annopath % self.img_ids[idx], self.cate, self.name2id)
-
-        return image, bboxes, classes
+    bboxes = np.array(bboxes, dtype=np.float32)
+    return {"bboxes": bboxes, "classes": classes}

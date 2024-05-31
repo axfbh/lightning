@@ -5,7 +5,7 @@ import random
 import cv2
 
 import torch
-from torch.utils.data import DataLoader, distributed
+from torch.utils.data import DataLoader, Dataset
 from torchvision.ops.boxes import box_convert
 
 from lightning.fabric.utilities.rank_zero import rank_zero_info
@@ -13,8 +13,8 @@ from lightning.fabric.utilities.rank_zero import rank_zero_info
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
-from ops.dataset.voc_dataset import VOCDetection
-from ops.dataset.utils import detect_collate_fn
+from ops.dataset.voc_dataset import voc_image_anno_paths, voc_bboxes_labels_from_xml
+from ops.dataset.utils import detect_collate_fn, DataCache
 from ops.augmentations.geometric.transforms import RandomShiftScaleRotate
 from ops.augmentations.geometric.resize import ResizeShortLongest
 from ops.augmentations.transforms import Mosaic
@@ -25,48 +25,40 @@ import ops.cv.io as io
 PIN_MEMORY = str(os.getenv("PIN_MEMORY", True)).lower() == "true"  # global pin_memory for dataloaders
 
 
-class MyDataSet(VOCDetection):
-    def __init__(self, mosaic, aug_mosaic, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class MyDataSet(Dataset):
+    def __init__(self,
+                 cache,
+                 mosaic,
+                 aug_mosaic,
+                 image_size,
+                 augment,
+                 transform):
 
+        self.cache = cache
+        self.transform = transform
+        self.augment = augment
         self.mosaic = mosaic
         self.aug_mosaic = aug_mosaic
 
         self.resize = A.Compose([
-            ResizeShortLongest(min_size=self.image_size[0], max_size=self.image_size[1], always_apply=True),
+            ResizeShortLongest(min_size=image_size[0], max_size=image_size[1], always_apply=True),
         ], A.BboxParams(format='pascal_voc', label_fields=['classes']))
         self.padding = A.Compose([
             A.PadIfNeeded(
-                min_height=self.image_size[0],
-                min_width=self.image_size[1],
+                min_height=image_size[0],
+                min_width=image_size[1],
                 always_apply=True,
                 border_mode=cv2.BORDER_CONSTANT, value=(114, 114, 114))
         ], A.BboxParams(format='pascal_voc', label_fields=['classes']))
 
-    def _update_image_cache(self):
-        indices = random.choices(range(len(self.img_ids)), k=3)  # 3 additional image indices
-        random.shuffle(indices)
-        image_cache = [None for _ in range(3)]
-        bboxes_cache = [None for _ in range(3)]
-        classes_cache = [None for _ in range(3)]
-        for i, index in enumerate(indices):
-            image, bboxes, classes = super().__getitem__(index)
-            image_cache[i], bboxes_cache[i], classes_cache[i] = self.resize(image=image, bboxes=bboxes,
-                                                                            classes=classes).values()
-        return image_cache, bboxes_cache, classes_cache
-
     def __getitem__(self, item):
-        image, bboxes, classes = super().__getitem__(item)
-        sample = self.resize(image=image, bboxes=bboxes, classes=classes)
+        sample = self.cache[item]
+        sample = self.resize(**sample)
 
         mosaic = random.random() < self.mosaic and self.augment
-
         if mosaic:
-            image_cache, bboxes_cache, classes_cache = self._update_image_cache()
-            sample = self.aug_mosaic(**sample,
-                                     image_cache=image_cache,
-                                     bboxes_cache=bboxes_cache,
-                                     classes_cache=classes_cache)
+            sample = self.aug_mosaic(**sample)
+
         sample = self.padding(**sample)
 
         if self.augment:
@@ -86,6 +78,9 @@ class MyDataSet(VOCDetection):
 
         return image, target
 
+    def __len__(self):
+        return len(self.cache)
+
 
 def create_dataloader(path,
                       image_size,
@@ -97,12 +92,22 @@ def create_dataloader(path,
                       workers=3,
                       shuffle=False,
                       persistent_workers=False):
-    aug_mosaic = A.Compose([
-        Mosaic(height=image_size[0] * 2, width=image_size[1] * 2, fill_value=114, always_apply=True),
-    ], A.BboxParams(format='pascal_voc', label_fields=['classes'], min_visibility=0.2))
+    image_paths, anno_paths, cate, name2id = voc_image_anno_paths(path, image_set, names)
+    cache = DataCache(image_paths, anno_paths, voc_bboxes_labels_from_xml, cate, name2id)
 
-    # A.MixUp()
-    # A.CoarseDropout() # CutOut
+    resize = A.Compose([
+        ResizeShortLongest(min_size=image_size[0], max_size=image_size[1], always_apply=True),
+    ], A.BboxParams(format='pascal_voc', label_fields=['classes']))
+
+    aug_mosaic = A.Compose([
+        Mosaic(
+            reference_data=cache,
+            height=image_size[0] * 2,
+            width=image_size[1] * 2,
+            read_fn=resize,
+            fill_value=114,
+            always_apply=True),
+    ], A.BboxParams(format='pascal_voc', label_fields=['classes'], min_visibility=0.2))
 
     transform = A.Compose([
         RandomShiftScaleRotate(
@@ -128,14 +133,14 @@ def create_dataloader(path,
         rank_zero_info(f"{colorstr('albumentations: ')}" + ", ".join(
             f"{x}".replace("always_apply=False, ", "") for x in transform if x.p))
 
-    dataset = MyDataSet(mosaic=hyp['mosaic'],
-                        aug_mosaic=aug_mosaic,
-                        root_dir=path,
-                        image_set=image_set,
-                        image_size=image_size,
-                        class_name=names,
-                        augment=augment,
-                        transform=transform)
+    dataset = MyDataSet(
+        cache=cache,
+        mosaic=hyp['mosaic'],
+        aug_mosaic=aug_mosaic,
+        image_size=image_size,
+        augment=augment,
+        transform=transform
+    )
 
     batch_size = min(batch_size, len(dataset))
     nd = torch.cuda.device_count()  # number of CUDA devices

@@ -1,8 +1,9 @@
+from typing import Callable, List
+
 import numpy as np
 import torch
 import math
-
-import xml.etree.ElementTree as ET
+import ops.cv.io as io
 
 
 def batch_images(images, size_divisible=32):
@@ -37,24 +38,23 @@ def detect_collate_fn(batch):
     return batched_imgs, batched_labels, torch.as_tensor(batched_imgs.shape[-2:])
 
 
-def voc_bboxes_labels_from_xml(path, cate=None, name2id=None):
-    anno = ET.parse(path).getroot()
-    bboxes = []
-    classes = []
-    for obj in anno.iter("object"):
-        if obj.find('difficult').text == '0':
-            _box = obj.find("bndbox")
-            box = [
-                _box.find("xmin").text,
-                _box.find("ymin").text,
-                _box.find("xmax").text,
-                _box.find("ymax").text,
-            ]
-            name = obj.find("name").text.lower().strip()
+class DataCache:
+    def __init__(self, image_paths: List[str], anno_paths: List[str], read_labels: Callable, *args):
+        self.image_paths: List = image_paths
+        self._set_cache(anno_paths, read_labels, *args)
 
-            if cate is None or name == cate:
-                bboxes.append(box)
-                classes.append(name if name2id is None else name2id[name])
+    def _set_cache(self, anno_paths, read_fn, *args):
+        self.annotations = []
 
-    bboxes = np.array(bboxes, dtype=np.float32)
-    return bboxes, classes
+        for anno in anno_paths:
+            self.annotations.append(read_fn(anno, *args))
+
+    def __getitem__(self, item):
+        anno = self.annotations[item]
+        image_path = self.image_paths[item]
+        sample = {'image': io.imread(image_path)}
+        sample.update(anno)
+        return sample
+
+    def __len__(self):
+        return len(self.image_paths)
