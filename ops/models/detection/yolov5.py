@@ -6,6 +6,7 @@ from ops.models.backbone.cspdarknet import CSPDarknetV2, CBM, WrapLayer
 from ops.models.backbone.utils import _cspdarknet_extractor
 from ops.models.head.yolo_head import YoloV5Head
 from ops.models.detection.utils import Yolo
+from ops.augmentations.transforms import Mosaic
 from ops.loss.yolo_loss import YoloLossV5
 
 
@@ -88,3 +89,14 @@ class YoloV5(Yolo):
 
     def on_fit_start(self) -> None:
         self.compute_loss = YoloLossV5(self)
+
+    # def on_train_epoch_start(self) -> None:
+    #     self.trainer.fit_loop._data_fetcher.iterator.iterables.dataset.mosaic = 0
+    #     self.trainer.fit_loop._data_fetcher.iterator.iterables.sampler.data_source.mosaic = 0
+    #     self.trainer.fit_loop._data_fetcher.iterator.iterables.batch_sampler.sampler.data_source.mosaic = 0
+    #     self.trainer.fit_loop._data_fetcher.iterator.sampler.data_source.mosaic = 0
+    #     self.trainer.fit_loop._data_fetcher.iterator.batch_sampler.sampler.data_source.mosaic = 0
+        # if isinstance(tf1, Mosaic):
+        #     tf1.p = 0
+        #     tf2.p = 0
+        #     tf3.p = 0

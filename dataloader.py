@@ -1,5 +1,4 @@
 import os
-import math
 import random
 
 import cv2
@@ -28,7 +27,6 @@ PIN_MEMORY = str(os.getenv("PIN_MEMORY", True)).lower() == "true"  # global pin_
 class MyDataSet(Dataset):
     def __init__(self,
                  cache,
-                 mosaic,
                  aug_mosaic,
                  image_size,
                  augment,
@@ -37,7 +35,6 @@ class MyDataSet(Dataset):
         self.cache = cache
         self.transform = transform
         self.augment = augment
-        self.mosaic = mosaic
         self.aug_mosaic = aug_mosaic
 
         self.resize = A.Compose([
@@ -47,16 +44,15 @@ class MyDataSet(Dataset):
             A.PadIfNeeded(
                 min_height=image_size[0],
                 min_width=image_size[1],
-                always_apply=True,
-                border_mode=cv2.BORDER_CONSTANT, value=(114, 114, 114))
+                border_mode=cv2.BORDER_CONSTANT, value=(114, 114, 114),
+                always_apply=True)
         ], A.BboxParams(format='pascal_voc', label_fields=['classes']))
 
     def __getitem__(self, item):
         sample = self.cache[item]
         sample = self.resize(**sample)
 
-        mosaic = random.random() < self.mosaic and self.augment
-        if mosaic:
+        if self.augment:
             sample = self.aug_mosaic(**sample)
 
         sample = self.padding(**sample)
@@ -104,7 +100,7 @@ def create_dataloader(path,
                 ResizeShortLongest(min_size=image_size[0], max_size=image_size[1], always_apply=True),
             ], A.BboxParams(format='pascal_voc', label_fields=['classes'])),
             fill_value=114,
-            always_apply=True),
+            p=hyp['mosaic']),
     ], A.BboxParams(format='pascal_voc', label_fields=['classes'], min_visibility=0.2))
 
     transform = A.Compose([
@@ -133,7 +129,6 @@ def create_dataloader(path,
 
     dataset = MyDataSet(
         cache=cache,
-        mosaic=hyp['mosaic'],
         aug_mosaic=aug_mosaic,
         image_size=image_size,
         augment=augment,

@@ -35,5 +35,6 @@ class ResizeShortLongest(DualTransform):
 
     def get_transform_init_args_names(self):
         return (
-            "image_size",
+            "min_size",
+            "max_size"
         )

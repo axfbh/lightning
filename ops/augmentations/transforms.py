@@ -171,7 +171,7 @@ class Mosaic(DualTransform):
                 "fill_value": self.fill_value}
 
     def get_transform_init_args_names(self) -> Tuple[str, ...]:
-        return "reference_data", "height", "width", "fill_value", "bboxes_cache_format"
+        return "reference_data", "height", "width", "fill_value"
 
 # if __name__ == '__main__':
 #     image = io.imread(r"D:\cgm\dataset\VOC2007\JPEGImages\000005.jpg")
