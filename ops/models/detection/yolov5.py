@@ -96,7 +96,7 @@ class YoloV5(Yolo):
     #     self.trainer.fit_loop._data_fetcher.iterator.iterables.batch_sampler.sampler.data_source.mosaic = 0
     #     self.trainer.fit_loop._data_fetcher.iterator.sampler.data_source.mosaic = 0
     #     self.trainer.fit_loop._data_fetcher.iterator.batch_sampler.sampler.data_source.mosaic = 0
-        # if isinstance(tf1, Mosaic):
-        #     tf1.p = 0
-        #     tf2.p = 0
-        #     tf3.p = 0
+    #     # if isinstance(tf1, Mosaic):
+    #     #     tf1.p = 0
+    #     #     tf2.p = 0
+    #     #     tf3.p = 0
