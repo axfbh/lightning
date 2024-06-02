@@ -5,7 +5,6 @@ from omegaconf import OmegaConf
 
 from dataloader import create_dataloader
 
-from ops.models.detection import YoloV5, YoloV4, YoloV7
 from ops.utils.logging import print_args, colorstr
 from ops.utils.callbacks import WarmupLR
 from ops.utils.trainer import Trainer
@@ -84,22 +83,22 @@ def main(opt):
     trainer = setup(opt, hyp)
 
     # model = YoloV7(anchors=cfg.anchors, num_classes=cfg.nc, phi='l')
-    model = YoloV5(anchors=cfg.anchors,
-                   num_classes=cfg.nc,
-                   depth_multiple=cfg.depth_multiple,
-                   width_multiple=cfg.width_multiple)
-
-    model.hyp = hyp
-    model.opt = opt
-
-    model.save_hyperparameters(dict(vars(opt), **hyp))
+    # model = YoloV5(anchors=cfg.anchors,
+    #                num_classes=cfg.nc,
+    #                depth_multiple=cfg.depth_multiple,
+    #                width_multiple=cfg.width_multiple)
+    #
+    # model.hyp = hyp
+    # model.opt = opt
+    #
+    # model.save_hyperparameters(dict(vars(opt), **hyp))
 
     train_loader = create_dataloader(Path(data.train),
                                      opt.image_size,
                                      opt.batch_size,
                                      data.names,
                                      hyp=hyp,
-                                     image_set='car_train',
+                                     image_set='train',
                                      augment=True,
                                      workers=opt.workers,
                                      shuffle=True,
@@ -110,16 +109,16 @@ def main(opt):
                                    opt.batch_size * 2,
                                    data.names,
                                    hyp=hyp,
-                                   image_set='car_val',
+                                   image_set='val',
                                    augment=False,
                                    workers=opt.workers,
                                    shuffle=False,
                                    persistent_workers=True)
 
-    trainer.fit(model=model,
-                train_dataloaders=train_loader,
-                val_dataloaders=val_loader,
-                ckpt_path=opt.weights if opt.resume else None)
+    # trainer.fit(model=model,
+    #             train_dataloaders=train_loader,
+    #             val_dataloaders=val_loader,
+    #             ckpt_path=opt.weights if opt.resume else None)
 
 
 if __name__ == '__main__':

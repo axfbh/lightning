@@ -1,25 +1,20 @@
 import os
-import random
 
 import cv2
 
 import torch
 from torch.utils.data import DataLoader, Dataset
-from torchvision.ops.boxes import box_convert
 
 from lightning.fabric.utilities.rank_zero import rank_zero_info
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
-
-from ops.dataset.voc_dataset import voc_image_anno_paths, voc_bboxes_labels_from_xml
-from ops.dataset.utils import detect_collate_fn, DataCache
 from ops.augmentations.geometric.transforms import RandomShiftScaleRotate
 from ops.augmentations.geometric.resize import ResizeShortLongest
 from ops.augmentations.transforms import Mosaic
 from ops.utils.logging import colorstr
-from ops.utils.torch_utils import torch_distributed_zero_first
-import ops.cv.io as io
+from ops.dataset.voc_dataset import voc_mask_label_from_image, voc_image_mask_paths
+from ops.dataset.utils import detect_collate_fn, DataCache
 
 PIN_MEMORY = str(os.getenv("PIN_MEMORY", True)).lower() == "true"  # global pin_memory for dataloaders
 
@@ -62,18 +57,9 @@ class MyDataSet(Dataset):
             sample = self.transform(**sample)
 
         image = ToTensorV2()(image=sample['image'])['image'].float()
-        bboxes = torch.FloatTensor(sample['bboxes'])
-        classes = torch.LongTensor(sample['classes'])[:, None]
+        mask = torch.FloatTensor(sample['mask'])
 
-        nl = len(bboxes)
-        target = torch.zeros((nl, 6))
-        if nl:
-            box = box_convert(bboxes, 'xyxy', 'cxcywh')
-            target[:, 1:2] = classes
-            target[:, 2:4] = box[:, :2]
-            target[:, 4:6] = box[:, 2:]
-
-        return image, target
+        return image, mask
 
     def __len__(self):
         return len(self.cache)
@@ -89,8 +75,8 @@ def create_dataloader(path,
                       workers=3,
                       shuffle=False,
                       persistent_workers=False):
-    image_paths, anno_paths, cate, name2id = voc_image_anno_paths(path, image_set, names)
-    cache = DataCache(image_paths, anno_paths, voc_bboxes_labels_from_xml, cate, name2id)
+    image_paths, mask_paths = voc_image_mask_paths(path, image_set)
+    cache = DataCache(image_paths, mask_paths, voc_mask_label_from_image, names)
 
     aug_mosaic = Mosaic(
         reference_data=cache,

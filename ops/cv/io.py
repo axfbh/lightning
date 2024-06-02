@@ -14,8 +14,8 @@ def show(name, img):
     cv2.destroyWindow(name)
 
 
-def imread(path):
-    if importlib.import_module('jpeg4py'):
+def imread(path: str):
+    if importlib.import_module('jpeg4py') and path.endswith("jpg"):
         import jpeg4py as jpeg
         img = jpeg.JPEG(path).decode()
     else:

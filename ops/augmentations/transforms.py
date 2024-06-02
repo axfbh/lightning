@@ -3,10 +3,11 @@ import random
 import cv2
 import numpy as np
 
-from albumentations import ImageOnlyTransform, DualTransform, BasicTransform, BaseCompose
+from albumentations import ImageOnlyTransform, DualTransform, BasicTransform, BaseCompose, Compose, Crop, BboxParams
 from albumentations.core.bbox_utils import denormalize_bbox, normalize_bbox
 
 import ops.augmentations.functional as F
+from ops.augmentations.geometric.transforms import RandomShiftScaleRotate
 import ops.cv.io as io
 
 
@@ -74,7 +75,7 @@ class SaltPepperNoise(ImageOnlyTransform):
         return "color", "n", "noise_scale", "border_scale", "saline"
 
 
-class Mosaic(DualTransform):
+class _Mosaic(DualTransform):
     """
         Mosaic augmentation arranges randomly selected four images into single one like the 2x2 grid layout.
     """
@@ -164,26 +165,46 @@ class Mosaic(DualTransform):
         mosaic_data = [self.read_fn(**self.reference_data[i]) for i in mosaic_idx]
 
         return {"mosaic_data": mosaic_data,
-                'x_center': int(random.uniform(self.height // 4, self.height - self.height // 4)),
-                'y_center': int(random.uniform(self.width // 4, self.width - self.width // 4)),
-                "height": self.height,
-                "width": self.width,
+                'x_center': int(random.uniform(self.height // 2, self.height - self.height // 2)),
+                'y_center': int(random.uniform(self.width // 2, self.width - self.width // 2)),
+                "height": self.height * 2,
+                "width": self.width * 2,
                 "fill_value": self.fill_value}
 
     def get_transform_init_args_names(self) -> Tuple[str, ...]:
         return "reference_data", "height", "width", "fill_value"
 
-# if __name__ == '__main__':
-#     image = io.imread(r"D:\cgm\dataset\VOC2007\JPEGImages\000005.jpg")
-#     print(image.shape)
-#     for _ in range(5):
-#         x0, y0, x1, y1 = 25, 12, 430, 310
-#
-#         var = SaltPepperNoise(p=1, salience=True, border_scale=0)(image=image,
-#                                                                   bboxes=np.array([[x0, y0, x1, y1]], dtype=float))
-#         var1 = cv2.rectangle(var['image'].copy(),
-#                              var['bboxes'][0, [0, 1]].astype(int),
-#                              var['bboxes'][0, [2, 3]].astype(int),
-#                              (255, 255, 0), 1)
-#         print(var1.shape)
-#         io.show('ad', var1)
+
+class Mosaic:
+    def __init__(
+            self,
+            height,
+            width,
+            read_fn: Union[BasicTransform, BaseCompose, Callable],
+            reference_data,
+            scale=0.5,
+            translate=0.1,
+            fill_value=0,
+            p=0.5):
+        self._mosaic = Compose([
+            _Mosaic(
+                height=height,
+                width=width,
+                read_fn=read_fn,
+                reference_data=reference_data,
+                fill_value=fill_value,
+                always_apply=True),
+            RandomShiftScaleRotate(
+                scale_limit=(1 - scale, 1 + scale),
+                shift_limit_x=(0.5 - translate, 0.5 + translate),
+                shift_limit_y=(0.5 - translate, 0.5 + translate),
+                rotate_limit=(0, 0),
+                border_mode=cv2.BORDER_CONSTANT,
+                value=(114, 114, 114),
+                position=RandomShiftScaleRotate.PositionType.TOP_LEFT,
+                always_apply=True),
+            Crop(x_max=width, y_max=height, always_apply=True),
+        ], BboxParams(format='pascal_voc', label_fields=['classes']), p=p)
+
+    def __call__(self, *args, **kwargs):
+        return self._mosaic(*args, **kwargs)

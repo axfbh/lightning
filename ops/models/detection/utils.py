@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Union, Sequence
 import math
 import numpy as np
 import torch
@@ -6,7 +6,7 @@ from torch import Tensor
 from ops.metric.DetectionMetric import MeanAveragePrecision
 from ops.utils.torch_utils import ModelEMA, smart_optimizer, smart_scheduler
 from utils.nms import non_max_suppression
-from lightning import LightningModule
+from lightning import LightningModule, Callback
 
 
 class Yolo(LightningModule):
@@ -47,12 +47,12 @@ class Yolo(LightningModule):
                                         max_det=300,
                                         multi_label=False,
                                         agnostic=False)
-            self.map_metric.update(preds, targets)
+            self.box_map_metric.update(preds, targets)
         return loss
 
     def on_validation_epoch_end(self) -> None:
         if not self.trainer.sanity_checking:
-            seen, nt, mp, mr, map50, map = self.map_metric.compute()
+            seen, nt, mp, mr, map50, map = self.box_map_metric.compute()
 
             fitness = map * 0.9 + map50 * 0.1
 
@@ -65,21 +65,30 @@ class Yolo(LightningModule):
                            'fitness_un': fitness},
                           on_epoch=True, sync_dist=True, batch_size=self.trainer.val_dataloaders.batch_size)
 
-            self.map_metric.reset()
+            self.box_map_metric.reset()
 
     def configure_model(self) -> None:
-        self.map_metric = MeanAveragePrecision(device=self.device)
+        m = self.head  # detection head models
+        nl = m.nl  # number of detection layers (to scale hyp)
+        nc = m.nc
+        self.hyp["box"] *= 3 / nl  # scale to layers
+        self.hyp["cls"] *= nc / 80 * 3 / nl  # scale to classes and layers
+        self.hyp["obj"] *= (max(self.opt.image_size[0],
+                                self.opt.image_size[1]) / 640) ** 2 * 3 / nl  # scale to image size and layers
+        self.hyp["label_smoothing"] = self.opt.label_smoothing
+
+        self.box_map_metric = MeanAveragePrecision(device=self.device)
 
     def configure_optimizers(self):
         optimizer = smart_optimizer(self,
-                                    self.optim,
+                                    self.opt.optimizer,
                                     self.hyp['lr'],
                                     self.hyp['momentum'],
                                     self.hyp['weight_decay'])
 
         scheduler = smart_scheduler(
             optimizer,
-            self.sche,
+            self.opt.scheduler,
             self.current_epoch - 1,
             lrf=self.hyp['lrf'],
             max_epochs=self.trainer.max_epochs
