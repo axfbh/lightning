@@ -20,7 +20,7 @@ def parse_opt():
                         help="resume most recent training")
     parser.add_argument("--cfg", type=str, default="./models/yolo-v4-v5-n.yaml", help="models.yaml path")
     parser.add_argument("--data", type=str, default="./data/voc.yaml", help="dataset.yaml path")
-    parser.add_argument("--hyp", type=str, default="./data/hyp/hyp-yolo-v5-low.yaml", help="hyperparameters path")
+    parser.add_argument("--hyp", type=str, default="./data/hyp/hyp-yolo-low.yaml", help="hyperparameters path")
 
     # -------------- 参数值 --------------
     parser.add_argument("--epochs", type=int, default=301, help="total training epochs")
