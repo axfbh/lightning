@@ -85,9 +85,7 @@ def main(opt):
 
     # model = YoloV7(anchors=cfg.anchors, num_classes=cfg.nc, phi='l')
     model = YoloV5(anchors=cfg.anchors,
-                   num_classes=cfg.nc,
-                   depth_multiple=cfg.depth_multiple,
-                   width_multiple=cfg.width_multiple)
+                   num_classes=cfg.nc)
 
     model.hyp = hyp
     model.opt = opt

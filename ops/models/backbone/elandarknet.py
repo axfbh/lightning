@@ -52,7 +52,7 @@ class MP1(nn.Module):
 
 
 class ElanDarkNet(nn.Module):
-    def __init__(self, transition_channels, block_channels, n, phi, num_classes=1000):
+    def __init__(self, transition_channels=32, block_channels=32, n=2, phi='l', num_classes=1000):
         super(ElanDarkNet, self).__init__()
 
         ids = {

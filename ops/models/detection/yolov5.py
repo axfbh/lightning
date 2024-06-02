@@ -11,8 +11,11 @@ from ops.loss.yolo_loss import YoloLossV5
 
 
 class YoloV5(Yolo):
-    def __init__(self, anchors, num_classes, depth_multiple, width_multiple):
+    def __init__(self, anchors, num_classes, phi):
         super(YoloV5, self).__init__()
+
+        width_multiple = {'n': 0.25, 's': 0.50, 'm': 0.75, 'l': 1.0, 'x': 1.25}[phi]
+        depth_multiple = {'n': 0.33, 's': 0.33, 'm': 0.67, 'l': 1.0, 'x': 1.33}[phi]
 
         base_channels = int(width_multiple * 64)  # 64
         base_depth = max(round(depth_multiple * 3), 1)  # 3

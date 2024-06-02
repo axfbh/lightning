@@ -50,7 +50,7 @@ class WrapLayer(nn.Module):
 
 
 class CSPDarknetV1(nn.Module):
-    def __init__(self, base_channels, base_depth, num_classes=100):
+    def __init__(self, base_channels=64, base_depth=3, num_classes=1000):
         super(CSPDarknetV1, self).__init__()
 
         DownSampleLayer = partial(CBM, kernel_size=3, stride=2)
@@ -118,8 +118,9 @@ class Focus(nn.Module):
 
 
 class CSPDarknetV2(nn.Module):
-    def __init__(self, base_channels, base_depth):
+    def __init__(self, base_channels=64, base_depth=3, num_classes=1000):
         super(CSPDarknetV2, self).__init__()
+
         # -----------------------------------------------#
         #   输入图片是640, 640, 3
         #   初始的基本通道是64
@@ -168,6 +169,9 @@ class CSPDarknetV2(nn.Module):
             WrapLayer(base_channels * 16, base_channels * 16, base_depth),
             SPPF(base_channels * 16, base_channels * 16, [5], conv_layer=CBM),
         )
+
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(base_channels * 32, num_classes)
 
         self.reset_parameters()
 
