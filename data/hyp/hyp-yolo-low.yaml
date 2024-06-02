@@ -21,7 +21,8 @@ fliplr: 0.5  # image flip left-right (probability)
 mosaic: 1.0
 
 # ---------- loss 参数 ----------
-anchor_t: 4.0
+#anchor_t: 4.0
+anchor_t: 0.2 # yolo v4
 cls_pw: 1.0
 obj_pw: 1.0
 box: 0.05  # box loss gain

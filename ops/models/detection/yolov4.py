@@ -56,7 +56,7 @@ class YoloV4(Yolo):
 
         self.cov1 = make_three_conv([base_channels * 16, base_channels * 32], base_channels * 32)
         self.spp = SPP([5, 9, 13])
-        self.cov2 = make_three_conv([base_channels * 16, base_channels * 32], base_channels * 64)
+        self.cov2 = make_three_conv([base_channels * 16, base_channels * 32], base_channels * 16 * 4)
 
         self.upsample1 = Upsample(base_channels * 16, base_channels * 8)
         self.conv_for_P4 = CBM(base_channels * 16, base_channels * 8, 1)
@@ -83,7 +83,7 @@ class YoloV4(Yolo):
         feat1, feat2, feat3 = x['0'], x['1'], x['2']
 
         P5 = self.cov1(feat3)
-        P5 = self.spp(P5)
+        P5 = torch.cat([P5, self.spp(P5)], 1)
         P5 = self.cov2(P5)
 
         P5_upsample = self.upsample1(P5)
