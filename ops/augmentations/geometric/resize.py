@@ -25,7 +25,12 @@ class ResizeShortLongest(DualTransform):
         return bbox
 
     def apply_to_mask(self, mask, min_size=0, max_size=0, **params) -> np.ndarray:
-        return mask
+        original_size = (params['rows'], params['cols'])
+        original_min_size = min(original_size)
+        original_max_size = max(original_size)
+        ratio = round(min(min_size / original_min_size, max_size / original_max_size), 5)
+        resize_mask = cv2.resize(mask, None, fx=ratio, fy=ratio)
+        return resize_mask
 
     def get_params(self) -> Dict[str, Any]:
         return {

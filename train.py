@@ -1,4 +1,3 @@
-import os
 import argparse
 from pathlib import Path
 from omegaconf import OmegaConf
@@ -84,8 +83,8 @@ def main(opt):
     trainer = setup(opt, hyp)
 
     # model = YoloV7(anchors=cfg.anchors, num_classes=cfg.nc, phi='l')
-    # model = YoloV5(anchors=cfg.anchors, num_classes=cfg.nc, phi='s')
-    model = YoloV4(anchors=cfg.anchors, num_classes=cfg.nc, phi='n')
+    model = YoloV5(anchors=cfg.anchors, num_classes=cfg.nc, phi='n')
+    # model = YoloV4(anchors=cfg.anchors, num_classes=cfg.nc, phi='n')
 
     model.hyp = hyp
     model.opt = opt

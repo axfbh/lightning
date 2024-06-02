@@ -34,14 +34,14 @@ class MyDataSet(Dataset):
 
         self.resize = A.Compose([
             ResizeShortLongest(min_size=image_size[0], max_size=image_size[1], always_apply=True),
-        ], A.BboxParams(format='pascal_voc', label_fields=['classes']))
+        ])
         self.padding = A.Compose([
             A.PadIfNeeded(
                 min_height=image_size[0],
                 min_width=image_size[1],
                 border_mode=cv2.BORDER_CONSTANT, value=(114, 114, 114),
                 always_apply=True)
-        ], A.BboxParams(format='pascal_voc', label_fields=['classes']))
+        ])
 
     def __getitem__(self, item):
         sample = self.cache[item]
@@ -59,7 +59,7 @@ class MyDataSet(Dataset):
         image = ToTensorV2()(image=sample['image'])['image'].float()
         mask = torch.FloatTensor(sample['mask'])
 
-        return image, mask
+        return image / 255., mask
 
     def __len__(self):
         return len(self.cache)
@@ -82,12 +82,11 @@ def create_dataloader(path,
         reference_data=cache,
         height=image_size[0],
         width=image_size[0],
-        read_fn=A.Compose([
-            ResizeShortLongest(min_size=image_size[0], max_size=image_size[1], always_apply=True),
-        ], A.BboxParams(format='pascal_voc', label_fields=['classes'])),
+        read_fn=ResizeShortLongest(min_size=image_size[0], max_size=image_size[1], always_apply=True),
         scale=hyp.scale,
         translate=hyp.translate,
         fill_value=114,
+        bbox_params=None,
         p=hyp['mosaic']
     )
 
@@ -108,7 +107,7 @@ def create_dataloader(path,
         A.CLAHE(p=0.01),
         A.HorizontalFlip(p=hyp.fliplr),
         A.VerticalFlip(p=hyp.flipud),
-    ], A.BboxParams(format='pascal_voc', label_fields=['classes'], min_visibility=0.2))
+    ])
 
     if augment:
         rank_zero_info(f"{colorstr('albumentations: ')}" + ", ".join(

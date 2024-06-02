@@ -8,6 +8,7 @@ from dataloader import create_dataloader
 from ops.utils.logging import print_args, colorstr
 from ops.utils.callbacks import WarmupLR
 from ops.utils.trainer import Trainer
+from ops.models.segmentation.unet import Unet
 
 from lightning.fabric.utilities.rank_zero import rank_zero_info
 
@@ -18,9 +19,9 @@ def parse_opt():
     # -------------- 参数文件 --------------
     parser.add_argument("--weights", default='./runs/train/version_1/checkpoints/last.pt',
                         help="resume most recent training")
-    parser.add_argument("--cfg", type=str, default="./models/yolo-v4-v5-n.yaml", help="models.yaml path")
-    parser.add_argument("--data", type=str, default="./data/voc.yaml", help="dataset.yaml path")
-    parser.add_argument("--hyp", type=str, default="./data/hyp/hyp-yolo-low.yaml", help="hyperparameters path")
+    # parser.add_argument("--cfg", type=str, default="./models/yolo.yaml", help="models.yaml path")
+    parser.add_argument("--data", type=str, default="../data/voc.yaml", help="dataset.yaml path")
+    parser.add_argument("--hyp", type=str, default="../data/hyp/hyp-yolo-low.yaml", help="hyperparameters path")
 
     # -------------- 参数值 --------------
     parser.add_argument("--epochs", type=int, default=301, help="total training epochs")
@@ -78,25 +79,20 @@ def setup(opt, hyp):
 
 def main(opt):
     hyp = OmegaConf.load(Path(opt.hyp))
-    cfg = OmegaConf.load(Path(opt.cfg))
+    # cfg = OmegaConf.load(Path(opt.cfg))
     data = OmegaConf.load(Path(opt.data))
     trainer = setup(opt, hyp)
 
-    # model = YoloV7(anchors=cfg.anchors, num_classes=cfg.nc, phi='l')
-    # model = YoloV5(anchors=cfg.anchors,
-    #                num_classes=cfg.nc,
-    #                depth_multiple=cfg.depth_multiple,
-    #                width_multiple=cfg.width_multiple)
-    #
-    # model.hyp = hyp
-    # model.opt = opt
-    #
-    # model.save_hyperparameters(dict(vars(opt), **hyp))
+    model = Unet(num_classes=20)
+    model.hyp = hyp
+    model.opt = opt
+
+    model.save_hyperparameters(dict(vars(opt), **hyp))
 
     train_loader = create_dataloader(Path(data.train),
                                      opt.image_size,
                                      opt.batch_size,
-                                     data.names,
+                                     data.colors,
                                      hyp=hyp,
                                      image_set='train',
                                      augment=True,
@@ -107,7 +103,7 @@ def main(opt):
     val_loader = create_dataloader(Path(data.val),
                                    opt.image_size,
                                    opt.batch_size * 2,
-                                   data.names,
+                                   data.colors,
                                    hyp=hyp,
                                    image_set='val',
                                    augment=False,
@@ -115,10 +111,10 @@ def main(opt):
                                    shuffle=False,
                                    persistent_workers=True)
 
-    # trainer.fit(model=model,
-    #             train_dataloaders=train_loader,
-    #             val_dataloaders=val_loader,
-    #             ckpt_path=opt.weights if opt.resume else None)
+    trainer.fit(model=model,
+                train_dataloaders=train_loader,
+                val_dataloaders=val_loader,
+                ckpt_path=opt.weights if opt.resume else None)
 
 
 if __name__ == '__main__':

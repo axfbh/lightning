@@ -78,4 +78,4 @@ def voc_mask_label_from_image(path, name2color: Dict) -> Dict:
     colors = list(name2color.values())[1:]
     for i, color in enumerate(colors):
         masks[i, (gt_mask == color).all(-1)] = 255
-    return {"mask": masks}
+    return {"masks": masks}

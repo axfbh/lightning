@@ -124,7 +124,7 @@ class _Mosaic(DualTransform):
                        fill_value=114,
                        **params):
         # TODO
-        mask_cache = [data['mask'] for data in mosaic_data]
+        mask_cache = [data['masks'] for data in mosaic_data]
         mask_cache.append(masks)
         return F.mosaic4(mask_cache, x_center, y_center, height, width, fill_value)
 
@@ -185,6 +185,7 @@ class Mosaic:
             scale=0.5,
             translate=0.1,
             fill_value=0,
+            bbox_params=BboxParams(format='pascal_voc', label_fields=['classes']),
             p=0.5):
         self._mosaic = Compose([
             _Mosaic(
@@ -204,7 +205,7 @@ class Mosaic:
                 position=RandomShiftScaleRotate.PositionType.TOP_LEFT,
                 always_apply=True),
             Crop(x_max=width, y_max=height, always_apply=True),
-        ], BboxParams(format='pascal_voc', label_fields=['classes']), p=p)
+        ], bbox_params, p=p)
 
     def __call__(self, *args, **kwargs):
         return self._mosaic(*args, **kwargs)
