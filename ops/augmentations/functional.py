@@ -41,14 +41,15 @@ def mosaic4(image_batch: List[np.ndarray], x_center, y_center, height: int, widt
     """
     if len(image_batch) != 4:
         raise ValueError(f"Length of image_batch should be 4. Got {len(image_batch)}")
+
     xc, yc = x_center, y_center
-    img4 = np.full((height, width, 3), fill_value, dtype=np.uint8)  # base image with 4 tiles
     padw_cache = []
     padh_cache = []
     for i, img in enumerate(image_batch):
-        (h, w) = img.shape[:2]
+        (h, w, c) = img.shape[:2]
 
         if i == 0:  # top left
+            img4 = np.full((height, width, c), fill_value, dtype=np.uint8)  # base image with 4 tiles
             x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc  # xmin, ymin, xmax, ymax (large image)
             x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
         elif i == 1:  # top right

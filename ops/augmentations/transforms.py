@@ -114,19 +114,19 @@ class _Mosaic(DualTransform):
         image, self.padh_cache, self.padw_cache = F.mosaic4(image_cache, x_center, y_center, height, width, fill_value)
         return image
 
-    def apply_to_masks(self,
-                       masks,
-                       mosaic_data=None,
-                       x_center=0,
-                       y_center=0,
-                       height=0,
-                       width=0,
-                       fill_value=114,
-                       **params):
+    def apply_to_mask(self,
+                      masks,
+                      mosaic_data=None,
+                      x_center=0,
+                      y_center=0,
+                      height=0,
+                      width=0,
+                      **params):
         # TODO
-        mask_cache = [data['masks'] for data in mosaic_data]
+        mask_cache = [data['mask'] for data in mosaic_data]
         mask_cache.append(masks)
-        return F.mosaic4(mask_cache, x_center, y_center, height, width, fill_value)
+        mask, *_ = F.mosaic4(mask_cache, x_center, y_center, height, width, 0)
+        return mask
 
     def apply_to_bbox(self, bbox, padh=0, padw=0, height=0, width=0, **params):
         return F.bbox_mosaic4(bbox, padh, padw, height, width)
