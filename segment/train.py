@@ -17,7 +17,7 @@ def parse_opt():
     parser = argparse.ArgumentParser()
 
     # -------------- 参数文件 --------------
-    parser.add_argument("--weights", default='./runs/train/version_1/checkpoints/last.pt',
+    parser.add_argument("--weights", default='./runs/train/version_4/checkpoints/last.pt',
                         help="resume most recent training")
     # parser.add_argument("--cfg", type=str, default="./models/yolo.yaml", help="models.yaml path")
     parser.add_argument("--data", type=str, default="../data/voc.yaml", help="dataset.yaml path")
@@ -25,8 +25,8 @@ def parse_opt():
 
     # -------------- 参数值 --------------
     parser.add_argument("--epochs", type=int, default=300, help="total training epochs")
-    parser.add_argument("--batch-size", type=int, default=4, help="total batch size for all GPUs")
-    parser.add_argument("--image-size", type=list, default=[384, 384], help="train, val image size HxW")
+    parser.add_argument("--batch-size", type=int, default=8, help="total batch size for all GPUs")
+    parser.add_argument("--image-size", type=list, default=[256, 256], help="train, val image size HxW")
     parser.add_argument("--resume", nargs="?", const=True, default=False, help="resume most recent training")
     parser.add_argument("--device", default="gpu", help="cpu, gpu, tpu, ipu, hpu, mps, auto")
     parser.add_argument("--single-cls", action="store_true", help="train multi-class data as single-class")
@@ -83,7 +83,7 @@ def main(opt):
     data = OmegaConf.load(Path(opt.data))
     trainer = setup(opt, hyp)
 
-    model = Unet(num_classes=20)
+    model = Unet(base_channels=32, num_classes=20)
     model.hyp = hyp
     model.opt = opt
 

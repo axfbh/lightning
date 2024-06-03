@@ -14,7 +14,8 @@ from ops.augmentations.geometric.resize import ResizeShortLongest
 from ops.augmentations.transforms import Mosaic
 from ops.utils.logging import colorstr
 from ops.dataset.voc_dataset import voc_mask_label_from_image, voc_image_mask_paths
-from ops.dataset.utils import detect_collate_fn, DataCache
+from ops.dataset.utils import DataCache
+import ops.cv.io as io
 
 PIN_MEMORY = str(os.getenv("PIN_MEMORY", True)).lower() == "true"  # global pin_memory for dataloaders
 
@@ -50,6 +51,8 @@ class MyDataSet(Dataset):
         if self.augment:
             sample = self.aug_mosaic(**sample)
             # io.visualize(sample['image'], sample['bboxes'], sample['classes'])
+            # for i in range(20):
+            #     io.show('mask', sample['mask'][..., i])
 
         sample = self.padding(**sample)
 
@@ -59,7 +62,7 @@ class MyDataSet(Dataset):
         image = ToTensorV2()(image=sample['image'])['image'].float()
         mask = torch.LongTensor(sample['mask'])
 
-        return image / 255., mask // 255
+        return image / 255., mask / 255
 
     def __len__(self):
         return len(self.cache)
