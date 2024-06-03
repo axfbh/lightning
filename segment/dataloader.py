@@ -57,9 +57,9 @@ class MyDataSet(Dataset):
             sample = self.transform(**sample)
 
         image = ToTensorV2()(image=sample['image'])['image'].float()
-        mask = torch.FloatTensor(sample['mask'])
+        mask = torch.LongTensor(sample['mask'])
 
-        return image / 255., mask
+        return image / 255., mask // 255
 
     def __len__(self):
         return len(self.cache)
@@ -130,5 +130,4 @@ def create_dataloader(path,
                       shuffle=shuffle,
                       num_workers=nw,
                       pin_memory=PIN_MEMORY,
-                      collate_fn=detect_collate_fn,
                       persistent_workers=persistent_workers)

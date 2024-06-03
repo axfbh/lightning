@@ -46,7 +46,7 @@ def mosaic4(image_batch: List[np.ndarray], x_center, y_center, height: int, widt
     padw_cache = []
     padh_cache = []
     for i, img in enumerate(image_batch):
-        (h, w, c) = img.shape[:2]
+        (h, w, c) = img.shape
 
         if i == 0:  # top left
             img4 = np.full((height, width, c), fill_value, dtype=np.uint8)  # base image with 4 tiles

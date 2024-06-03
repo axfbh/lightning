@@ -77,7 +77,7 @@ class RandomShiftScaleRotate(DualTransform):
         height, width = params['rows'], params['cols']
         center = self.__update_center_params(width, height)
         M = F.shift_scale_rotate_matrix(center, angle, scale, dx, dy, height, width)
-        return cv2.warpAffine(mask, M[:2], dsize=(width, height), borderMode=self.border_mode, borderValue=self.value)
+        return cv2.warpAffine(mask, M[:2], dsize=(width, height), borderMode=self.border_mode, borderValue=0)
 
     def get_params(self) -> Dict[str, Any]:
         return {

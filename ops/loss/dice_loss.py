@@ -16,8 +16,9 @@ class DiceLoss(nn.Module):
     def forward(self, predict, target):
 
         if self.multiple:
-            predict = F.softmax(predict, dim=1)
-            target = F.one_hot(target, self.num_classes)
+            predict = F.softmax(predict, dim=-1)
+            if target.ndim == 3 or (target.ndim == 4 and target.shape[-1] == 1):
+                target = F.one_hot(target, self.num_classes)
         else:
             assert predict.size(1) == target.size(), "the size of predict and target must be equal."
             predict = torch.sigmoid(predict)

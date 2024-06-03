@@ -24,9 +24,9 @@ def parse_opt():
     parser.add_argument("--hyp", type=str, default="../data/hyp/hyp-yolo-low.yaml", help="hyperparameters path")
 
     # -------------- 参数值 --------------
-    parser.add_argument("--epochs", type=int, default=301, help="total training epochs")
-    parser.add_argument("--batch-size", type=int, default=16, help="total batch size for all GPUs")
-    parser.add_argument("--image-size", type=list, default=[640, 640], help="train, val image size HxW")
+    parser.add_argument("--epochs", type=int, default=300, help="total training epochs")
+    parser.add_argument("--batch-size", type=int, default=4, help="total batch size for all GPUs")
+    parser.add_argument("--image-size", type=list, default=[384, 384], help="train, val image size HxW")
     parser.add_argument("--resume", nargs="?", const=True, default=False, help="resume most recent training")
     parser.add_argument("--device", default="gpu", help="cpu, gpu, tpu, ipu, hpu, mps, auto")
     parser.add_argument("--single-cls", action="store_true", help="train multi-class data as single-class")
@@ -66,7 +66,7 @@ def setup(opt, hyp):
         device=opt.device,
         nproc_per_node=1,
         accumulate=accumulate,
-        bar_train_title=("box_loss", "obj_loss", "cls_loss"),
+        bar_train_title=("dice_loss",),
         bar_val_title=("Images", "Instances", "P", "R", "mAP50", "mAP50-95"),
         callbacks=[warmup_callback]
     )
