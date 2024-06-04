@@ -26,9 +26,11 @@ class RandomShiftScaleRotate(DualTransform):
                  position=PositionType.CENTER,
                  border_mode: int = cv2.BORDER_REFLECT_101,
                  value=None,
+                 mask_value=None,
                  always_apply=False,
                  p=0.5):
         super().__init__(always_apply, p)
+        self.mask_value = mask_value
         self.rotate_limit = rotate_limit
         self.scale_limit = scale_limit
         self.shift_limit_x = shift_limit_x
@@ -77,7 +79,8 @@ class RandomShiftScaleRotate(DualTransform):
         height, width = params['rows'], params['cols']
         center = self.__update_center_params(width, height)
         M = F.shift_scale_rotate_matrix(center, angle, scale, dx, dy, height, width)
-        return cv2.warpAffine(mask, M[:2], dsize=(width, height), borderMode=self.border_mode, borderValue=0)
+        return cv2.warpAffine(mask, M[:2], dsize=(width, height), borderMode=self.border_mode,
+                              borderValue=self.mask_value)
 
     def get_params(self) -> Dict[str, Any]:
         return {

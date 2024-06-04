@@ -1,5 +1,6 @@
 import os
 
+import numpy as np
 import cv2
 
 import torch
@@ -27,7 +28,6 @@ class MyDataSet(Dataset):
                  image_size,
                  augment,
                  transform):
-
         self.cache = cache
         self.transform = transform
         self.augment = augment
@@ -40,7 +40,9 @@ class MyDataSet(Dataset):
             A.PadIfNeeded(
                 min_height=image_size[0],
                 min_width=image_size[1],
-                border_mode=cv2.BORDER_CONSTANT, value=(114, 114, 114),
+                border_mode=cv2.BORDER_CONSTANT,
+                value=(114, 114, 114),
+                mask_value=(0, 0, 0),
                 always_apply=True)
         ])
 
@@ -48,13 +50,15 @@ class MyDataSet(Dataset):
         sample = self.cache[item]
         sample = self.resize(**sample)
 
-        if self.augment:
-            sample = self.aug_mosaic(**sample)
-            # io.visualize(sample['image'], sample['bboxes'], sample['classes'])
-            # for i in range(20):
-            #     io.show('mask', sample['mask'][..., i])
+        # if self.augment:
+        #     sample = self.aug_mosaic(**sample)
+        # io.visualize(sample['image'], sample['bboxes'], sample['classes'])
+        # for i in range(20):
+        #     io.show('mask', sample['mask'][..., i])
 
         sample = self.padding(**sample)
+        # mask = sample['mask'].sum(-1).astype(np.uint8)
+        # io.show('image', cv2.hconcat([sample['image'], cv2.merge([mask, mask, mask])]))
 
         if self.augment:
             sample = self.transform(**sample)
@@ -62,7 +66,7 @@ class MyDataSet(Dataset):
         image = ToTensorV2()(image=sample['image'])['image'].float()
         mask = torch.LongTensor(sample['mask'])
 
-        return image / 255., mask / 255
+        return image / 255., mask
 
     def __len__(self):
         return len(self.cache)

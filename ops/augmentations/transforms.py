@@ -87,6 +87,7 @@ class _Mosaic(DualTransform):
             read_fn: Union[BasicTransform, BaseCompose, Callable],
             reference_data,
             fill_value=0,
+            mask_value=0,
             always_apply=False,
             p=0.5,
     ):
@@ -99,6 +100,7 @@ class _Mosaic(DualTransform):
         self.height = height
         self.width = width
         self.fill_value = fill_value
+        self.mask_value = mask_value
 
     def apply(self,
               image,
@@ -107,11 +109,10 @@ class _Mosaic(DualTransform):
               y_center=0,
               height=0,
               width=0,
-              fill_value=114,
               **params):
         image_cache = [data['image'] for data in mosaic_data]
         image_cache.append(image)
-        image, self.padh_cache, self.padw_cache = F.mosaic4(image_cache, x_center, y_center, height, width, fill_value)
+        image, self.padh_cache, self.padw_cache = F.mosaic4(image_cache, x_center, y_center, height, width, self.fill_value)
         return image
 
     def apply_to_mask(self,
@@ -125,7 +126,7 @@ class _Mosaic(DualTransform):
         # TODO
         mask_cache = [data['mask'] for data in mosaic_data]
         mask_cache.append(masks)
-        mask, *_ = F.mosaic4(mask_cache, x_center, y_center, height, width, 0)
+        mask, *_ = F.mosaic4(mask_cache, x_center, y_center, height, width, self.mask_value)
         return mask
 
     def apply_to_bbox(self, bbox, padh=0, padw=0, height=0, width=0, **params):
@@ -168,8 +169,7 @@ class _Mosaic(DualTransform):
                 'x_center': int(random.uniform(self.height // 2, self.height - self.height // 2)),
                 'y_center': int(random.uniform(self.width // 2, self.width - self.width // 2)),
                 "height": self.height * 2,
-                "width": self.width * 2,
-                "fill_value": self.fill_value}
+                "width": self.width * 2}
 
     def get_transform_init_args_names(self) -> Tuple[str, ...]:
         return "reference_data", "height", "width", "fill_value"
@@ -185,6 +185,7 @@ class Mosaic:
             scale=0.5,
             translate=0.1,
             fill_value=0,
+            mask_value=0,
             bbox_params=BboxParams(format='pascal_voc', label_fields=['classes']),
             p=0.5):
         self._mosaic = Compose([
@@ -194,6 +195,7 @@ class Mosaic:
                 read_fn=read_fn,
                 reference_data=reference_data,
                 fill_value=fill_value,
+                mask_value=mask_value,
                 always_apply=True),
             RandomShiftScaleRotate(
                 scale_limit=(1 - scale, 1 + scale),
@@ -202,6 +204,7 @@ class Mosaic:
                 rotate_limit=(0, 0),
                 border_mode=cv2.BORDER_CONSTANT,
                 value=(114, 114, 114),
+                mask_value=mask_value,
                 position=RandomShiftScaleRotate.PositionType.TOP_LEFT,
                 always_apply=True),
             Crop(x_max=width, y_max=height, always_apply=True),
