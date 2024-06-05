@@ -26,9 +26,9 @@ def parse_opt():
 
     # -------------- 参数值 --------------
     parser.add_argument("--epochs", type=int, default=301, help="total training epochs")
-    parser.add_argument("--batch-size", type=int, default=3, help="total batch size for all GPUs")
-    parser.add_argument("--image-size", type=list, default=[256, 256], help="train, val image size HxW")
-    parser.add_argument("--resume", nargs="?", const=True, default=True, help="resume most recent training")
+    parser.add_argument("--batch-size", type=int, default=8, help="total batch size for all GPUs")
+    parser.add_argument("--image-size", type=list, default=[640, 640], help="train, val image size HxW")
+    parser.add_argument("--resume", nargs="?", const=True, default=False, help="resume most recent training")
     parser.add_argument("--device", default="gpu", help="cpu, gpu, tpu, ipu, hpu, mps, auto")
     parser.add_argument("--single-cls", action="store_true", help="train multi-class data as single-class")
     parser.add_argument("--optimizer", type=str, choices=["SGD", "Adam", "AdamW"],
@@ -68,7 +68,7 @@ def setup(opt, hyp):
         nproc_per_node=1,
         accumulate=accumulate,
         bar_train_title=("cnt_loss",),
-        bar_val_title=("Images", "Instances", "P", "R", "mAP50", "mAP50-95"),
+        bar_val_title=("Acc", "Acc_class", "mIoU", "fwIoU"),
         callbacks=[warmup_callback]
     )
 

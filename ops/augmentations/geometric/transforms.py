@@ -51,7 +51,11 @@ class RandomShiftScaleRotate(DualTransform):
         height, width = params['rows'], params['cols']
         center = self.__update_center_params(width, height)
         M = F.shift_scale_rotate_matrix(center, angle, scale, dx, dy, height, width)
-        return cv2.warpAffine(img, M[:2], dsize=(width, height), borderMode=self.border_mode, borderValue=self.value)
+        return cv2.warpAffine(img,
+                              M[:2],
+                              dsize=(width, height),
+                              borderMode=self.border_mode,
+                              borderValue=self.value)
 
     def apply_to_bbox(
             self,
@@ -79,8 +83,12 @@ class RandomShiftScaleRotate(DualTransform):
         height, width = params['rows'], params['cols']
         center = self.__update_center_params(width, height)
         M = F.shift_scale_rotate_matrix(center, angle, scale, dx, dy, height, width)
-        return cv2.warpAffine(mask, M[:2], dsize=(width, height), borderMode=self.border_mode,
-                              borderValue=self.mask_value)
+        return cv2.warpAffine(mask,
+                              M[:2],
+                              dsize=(width, height),
+                              borderMode=self.border_mode,
+                              borderValue=self.mask_value,
+                              flags=cv2.INTER_NEAREST)
 
     def get_params(self) -> Dict[str, Any]:
         return {

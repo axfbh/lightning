@@ -69,6 +69,37 @@ def mosaic4(image_batch: List[np.ndarray], x_center, y_center, height: int, widt
     return img4, padh_cache, padw_cache
 
 
+def mask_mosaic4(image_batch: List[np.ndarray], x_center, y_center, height: int, width: int, fill_value: int = 0):
+    if len(image_batch) != 4:
+        raise ValueError(f"Length of image_batch should be 4. Got {len(image_batch)}")
+
+    xc, yc = x_center, y_center
+    padw_cache = []
+    padh_cache = []
+    for i, img in enumerate(image_batch):
+        (h, w) = img.shape
+
+        if i == 0:  # top left
+            img4 = np.full((height, width), fill_value, dtype=np.uint8)  # base image with 4 tiles
+            x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc  # xmin, ymin, xmax, ymax (large image)
+            x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
+        elif i == 1:  # top right
+            x1a, y1a, x2a, y2a = xc, max(yc - h, 0), min(xc + w, width), yc
+            x1b, y1b, x2b, y2b = 0, h - (y2a - y1a), min(w, x2a - x1a), h
+        elif i == 2:  # bottom left
+            x1a, y1a, x2a, y2a = max(xc - w, 0), yc, xc, min(height, yc + h)
+            x1b, y1b, x2b, y2b = w - (x2a - x1a), 0, w, min(y2a - y1a, h)
+        elif i == 3:  # bottom right
+            x1a, y1a, x2a, y2a = xc, yc, min(xc + w, width), min(height, yc + h)
+            x1b, y1b, x2b, y2b = 0, 0, min(w, x2a - x1a), min(y2a - y1a, h)
+
+        img4[y1a:y2a, x1a:x2a] = img[y1b:y2b, x1b:x2b]  # img4[ymin:ymax, xmin:xmax]
+        padw_cache.append(x1a - x1b)
+        padh_cache.append(y1a - y1b)
+
+    return img4, padh_cache, padw_cache
+
+
 def bbox_mosaic4(bbox: Tuple, padh: int, padw: int, height: int, width: int):
     """Put the given bbox in one of the cells of the 2x2 grid.
     Args:

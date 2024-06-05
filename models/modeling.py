@@ -4,9 +4,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from lightning import LightningModule
 from ops.utils.torch_utils import ModelEMA, smart_optimizer, smart_scheduler
-from ops.metric.SegmentationMetric import SegmentationMetric
+from ops.metric.SegmentationMetric import Evaluator
+from ops.utils.torch_utils import from_torch_to_numpy
 from ops.loss.dice_loss import DiceLoss
-from torchmetrics.segmentation import MeanIoU
+
+
+# from torchmetrics.segmentation import MeanIoU
 
 
 class DoubleConv(nn.Module):
@@ -113,36 +116,42 @@ class Unet(LightningModule):
         x = self(images)
         loss = self.compute_loss(x, masks)
         self.log('cnt_loss', loss, on_epoch=True, sync_dist=True, batch_size=self.trainer.train_dataloader.batch_size)
+        return loss * self.trainer.accumulate_grad_batches * self.trainer.world_size
+
+    def validation_step(self, batch, batch_idx):
+        images, masks = batch
+        preds = self.ema_model(images)
+        loss = self.compute_loss(preds, masks)
+
+        if not self.trainer.sanity_checking:
+            self.mask_metric.add_batch(from_torch_to_numpy(masks), from_torch_to_numpy(preds.argmax(1)))
+
         return loss
 
-    # def validation_step(self, batch, batch_idx):
-    #     images, masks = batch
-    #     x = self.ema_model(images)
-    #     loss = self.compute_loss(x, masks)
-    #
-    #     if not self.trainer.sanity_checking:
-    #         self.mask_metric.update(x.softmax(1).argmax(1), masks)
-    #
-    #     return loss
-    #
-    # def on_validation_epoch_end(self) -> None:
-    #     if not self.trainer.sanity_checking:
-    #         miou = self.mask_metric.compute()
-    #
-    #         fitness = miou
-    #
-    #         self.log_dict({'miou': miou,
-    #                        'fitness_un': fitness},
-    #                       on_epoch=True, sync_dist=True, batch_size=self.trainer.val_dataloaders.batch_size)
-    #
-    #         self.mask_metric.reset()
+    def on_validation_epoch_end(self) -> None:
+        if not self.trainer.sanity_checking:
+            Acc = self.mask_metric.Pixel_Accuracy()
+            Acc_class = self.mask_metric.Pixel_Accuracy_Class()
+            mIoU = self.mask_metric.Mean_Intersection_over_Union()
+            FWIoU = self.mask_metric.Frequency_Weighted_Intersection_over_Union()
+
+            fitness = mIoU * 0.9 + 0.1 * Acc_class
+
+            self.log_dict({'Acc': Acc,
+                           'Acc_class': Acc_class,
+                           'mIoU': mIoU,
+                           'FWIoU': FWIoU,
+                           'fitness_un': fitness},
+                          on_epoch=True, sync_dist=True, batch_size=self.trainer.val_dataloaders.batch_size)
+
+            self.mask_metric.reset()
 
     def on_train_batch_end(self, outputs, batch: Any, batch_idx: int) -> None:
         self.ema_model.update(self)
 
-    # def configure_model(self) -> None:
-    #     # self.mask_metric = SegmentationMetric(self.n_classes)
-    #     self.mask_metric = MeanIoU(self.n_classes)
+    def configure_model(self) -> None:
+        # self.mask_metric = SegmentationMetric(self.n_classes)
+        self.mask_metric = Evaluator(self.n_classes)
 
     def configure_optimizers(self):
         optimizer = smart_optimizer(self,
@@ -164,4 +173,4 @@ class Unet(LightningModule):
         return [optimizer], [scheduler]
 
     def on_fit_start(self) -> None:
-        self.compute_loss = nn.CrossEntropyLoss()
+        self.compute_loss = nn.CrossEntropyLoss(ignore_index=255)

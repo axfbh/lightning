@@ -50,11 +50,10 @@ class MyDataSet(Dataset):
         sample = self.cache[item]
         sample = self.resize(**sample)
 
-        # if self.augment:
-        #     sample = self.aug_mosaic(**sample)
-        # io.visualize(sample['image'], sample['bboxes'], sample['classes'])
-        # for i in range(20):
-        #     io.show('mask', sample['mask'][..., i])
+        if self.augment:
+            sample = self.aug_mosaic(**sample)
+            # mask = sample['mask']
+            # io.show('image', cv2.hconcat([sample['image'], cv2.merge([mask, mask, mask])]))
 
         sample = self.padding(**sample)
 
@@ -100,16 +99,16 @@ def create_dataloader(path,
     )
 
     transform = A.Compose([
-        # RandomShiftScaleRotate(
-        #     scale_limit=(1 - hyp.scale, 1 + hyp.scale),
-        #     shift_limit_x=(0.5 - hyp.translate, 0.5 + hyp.translate),
-        #     shift_limit_y=(0.5 - hyp.translate, 0.5 + hyp.translate),
-        #     rotate_limit=(0, 0),
-        #     border_mode=cv2.BORDER_CONSTANT,
-        #     value=(114, 114, 114),
-        #     mask_value=0,
-        #     position=RandomShiftScaleRotate.PositionType.TOP_LEFT,
-        #     always_apply=True),
+        RandomShiftScaleRotate(
+            scale_limit=(1 - hyp.scale, 1 + hyp.scale),
+            shift_limit_x=(0.5 - hyp.translate, 0.5 + hyp.translate),
+            shift_limit_y=(0.5 - hyp.translate, 0.5 + hyp.translate),
+            rotate_limit=(0, 0),
+            border_mode=cv2.BORDER_CONSTANT,
+            value=(114, 114, 114),
+            mask_value=0,
+            position=RandomShiftScaleRotate.PositionType.TOP_LEFT,
+            always_apply=True),
         A.HueSaturationValue(always_apply=True),
         A.Blur(p=0.01),
         A.MedianBlur(p=0.01),

@@ -52,7 +52,6 @@ class DataCache:
     def __getitem__(self, item):
         anno = self.annotations[item]
         image_path = self.image_paths[item]
-        print(image_path)
         sample = {'image': io.imread(image_path)}
         sample.update(anno)
         return sample
