@@ -35,6 +35,8 @@ class MyDataSet(Dataset):
 
         self.resize = ResizeShortLongest(min_size=image_size[0], max_size=image_size[1], always_apply=True)
 
+        self.normal = A.Normalize(always_apply=True)
+
         self.padding = A.PadIfNeeded(
             min_height=image_size[0],
             min_width=image_size[1],
@@ -60,11 +62,12 @@ class MyDataSet(Dataset):
             sample = self.transform(**sample)
             # mask = sample['mask']
             # io.show('image', cv2.hconcat([sample['image'], cv2.merge([mask, mask, mask])]))
+        sample = self.normal(**sample)
 
         image = ToTensorV2()(image=sample['image'])['image'].float()
         mask = torch.LongTensor(sample['mask'])
 
-        return image / 255., mask
+        return image, mask
 
     def __len__(self):
         return len(self.cache)
@@ -97,16 +100,16 @@ def create_dataloader(path,
     )
 
     transform = A.Compose([
-        RandomShiftScaleRotate(
-            scale_limit=(1 - hyp.scale, 1 + hyp.scale),
-            shift_limit_x=(0.5 - hyp.translate, 0.5 + hyp.translate),
-            shift_limit_y=(0.5 - hyp.translate, 0.5 + hyp.translate),
-            rotate_limit=(0, 0),
-            border_mode=cv2.BORDER_CONSTANT,
-            value=(114, 114, 114),
-            mask_value=0,
-            position=RandomShiftScaleRotate.PositionType.TOP_LEFT,
-            always_apply=True),
+        # RandomShiftScaleRotate(
+        #     scale_limit=(1 - hyp.scale, 1 + hyp.scale),
+        #     shift_limit_x=(0.5 - hyp.translate, 0.5 + hyp.translate),
+        #     shift_limit_y=(0.5 - hyp.translate, 0.5 + hyp.translate),
+        #     rotate_limit=(0, 0),
+        #     border_mode=cv2.BORDER_CONSTANT,
+        #     value=(114, 114, 114),
+        #     mask_value=0,
+        #     position=RandomShiftScaleRotate.PositionType.TOP_LEFT,
+        #     always_apply=True),
         A.HueSaturationValue(always_apply=True),
         A.Blur(p=0.01),
         A.MedianBlur(p=0.01),

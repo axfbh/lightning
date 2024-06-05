@@ -11,7 +11,6 @@ from ops.utils.trainer import Trainer
 
 from lightning.fabric.utilities.rank_zero import rank_zero_info
 
-
 def parse_opt():
     parser = argparse.ArgumentParser()
 

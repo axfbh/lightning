@@ -101,7 +101,7 @@ def create_dataloader(path,
         ], A.BboxParams(format='pascal_voc', label_fields=['classes'])),
         scale=hyp.scale,
         translate=hyp.translate,
-        fill_value=114,
+        value=114,
         p=hyp['mosaic']
     )
 

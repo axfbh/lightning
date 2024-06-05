@@ -4,7 +4,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from lightning import LightningModule
 from ops.utils.torch_utils import ModelEMA, smart_optimizer, smart_scheduler
+from ops.metric.SegmentationMetric import SegmentationMetric
 from ops.loss.dice_loss import DiceLoss
+from torchmetrics.segmentation import MeanIoU
 
 
 class DoubleConv(nn.Module):
@@ -109,13 +111,38 @@ class Unet(LightningModule):
     def training_step(self, batch, batch_idx):
         images, masks = batch
         x = self(images)
-        # masks = masks.permute([0, 3, 1, 2]).contiguous()
         loss = self.compute_loss(x, masks)
         self.log('cnt_loss', loss, on_epoch=True, sync_dist=True, batch_size=self.trainer.train_dataloader.batch_size)
         return loss
 
+    # def validation_step(self, batch, batch_idx):
+    #     images, masks = batch
+    #     x = self.ema_model(images)
+    #     loss = self.compute_loss(x, masks)
+    #
+    #     if not self.trainer.sanity_checking:
+    #         self.mask_metric.update(x.softmax(1).argmax(1), masks)
+    #
+    #     return loss
+    #
+    # def on_validation_epoch_end(self) -> None:
+    #     if not self.trainer.sanity_checking:
+    #         miou = self.mask_metric.compute()
+    #
+    #         fitness = miou
+    #
+    #         self.log_dict({'miou': miou,
+    #                        'fitness_un': fitness},
+    #                       on_epoch=True, sync_dist=True, batch_size=self.trainer.val_dataloaders.batch_size)
+    #
+    #         self.mask_metric.reset()
+
     def on_train_batch_end(self, outputs, batch: Any, batch_idx: int) -> None:
         self.ema_model.update(self)
+
+    # def configure_model(self) -> None:
+    #     # self.mask_metric = SegmentationMetric(self.n_classes)
+    #     self.mask_metric = MeanIoU(self.n_classes)
 
     def configure_optimizers(self):
         optimizer = smart_optimizer(self,

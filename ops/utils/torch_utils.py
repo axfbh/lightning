@@ -149,6 +149,10 @@ def output_to_target(output, max_det=300):
     return torch.cat(targets, 0).numpy()
 
 
+def from_torch_to_numpy(feat: torch.Tensor):
+    return feat.cpu().numpy()
+
+
 class ModelEMA:
     """Updated Exponential Moving Average (EMA) from https://github.com/rwightman/pytorch-image-models
     Keeps a moving average of everything in the models state_dict (parameters and buffers)
