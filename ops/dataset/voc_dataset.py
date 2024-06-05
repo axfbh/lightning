@@ -73,10 +73,11 @@ def voc_bboxes_labels_from_xml(path, cate: str = None, name2id: Dict = None) -> 
 
 
 def voc_mask_label_from_image(path, name2color: Dict) -> Dict:
-    gt_mask = np.asarray(Image.open(path))
-    # h, w = gt_mask.shape[:-1]
-    # masks = np.zeros((h, w, 20), dtype=np.uint8)
-    # colors = list(name2color.values())[1:]
-    # for i, color in enumerate(colors):
-    #     masks[(gt_mask == color).all(-1), i] = 255
-    return {"mask": gt_mask}
+    # gt_mask = np.asarray(Image.open(path))
+    gt_mask = io.imread(path)
+    h, w = gt_mask.shape[:-1]
+    masks = np.zeros((h, w), dtype=np.uint8)
+    colors = list(name2color.values())[1:]
+    for i, color in enumerate(colors):
+        masks[(gt_mask == color).all(-1)] = (i + 1)
+    return {"mask": masks}

@@ -111,7 +111,7 @@ class Unet(LightningModule):
         x = self(images)
         # masks = masks.permute([0, 3, 1, 2]).contiguous()
         loss = self.compute_loss(x, masks)
-        self.log('dice_loss', loss, on_epoch=True, sync_dist=True, batch_size=self.trainer.train_dataloader.batch_size)
+        self.log('cnt_loss', loss, on_epoch=True, sync_dist=True, batch_size=self.trainer.train_dataloader.batch_size)
         return loss
 
     def on_train_batch_end(self, outputs, batch: Any, batch_idx: int) -> None:
@@ -137,4 +137,4 @@ class Unet(LightningModule):
         return [optimizer], [scheduler]
 
     def on_fit_start(self) -> None:
-        self.compute_loss = nn.CrossEntropyLoss(ignore_index=255, size_average=True)
+        self.compute_loss = nn.CrossEntropyLoss()

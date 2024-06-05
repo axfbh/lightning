@@ -33,18 +33,16 @@ class MyDataSet(Dataset):
         self.augment = augment
         self.aug_mosaic = aug_mosaic
 
-        self.resize = A.Compose([
-            ResizeShortLongest(min_size=image_size[0], max_size=image_size[1], always_apply=True),
-        ])
-        self.padding = A.Compose([
-            A.PadIfNeeded(
-                min_height=image_size[0],
-                min_width=image_size[1],
-                border_mode=cv2.BORDER_CONSTANT,
-                value=(114, 114, 114),
-                mask_value=(0, 0, 0),
-                always_apply=True)
-        ])
+        self.resize = ResizeShortLongest(min_size=image_size[0], max_size=image_size[1], always_apply=True)
+
+        self.padding = A.PadIfNeeded(
+            min_height=image_size[0],
+            min_width=image_size[1],
+            border_mode=cv2.BORDER_CONSTANT,
+            value=(114, 114, 114),
+            mask_value=(0, 0, 0),
+            always_apply=True
+        )
 
     def __getitem__(self, item):
         sample = self.cache[item]
@@ -57,11 +55,11 @@ class MyDataSet(Dataset):
         #     io.show('mask', sample['mask'][..., i])
 
         sample = self.padding(**sample)
-        # mask = sample['mask'].sum(-1).astype(np.uint8)
-        # io.show('image', cv2.hconcat([sample['image'], cv2.merge([mask, mask, mask])]))
 
         if self.augment:
             sample = self.transform(**sample)
+            # mask = sample['mask']
+            # io.show('image', cv2.hconcat([sample['image'], cv2.merge([mask, mask, mask])]))
 
         image = ToTensorV2()(image=sample['image'])['image'].float()
         mask = torch.LongTensor(sample['mask'])
@@ -92,7 +90,8 @@ def create_dataloader(path,
         read_fn=ResizeShortLongest(min_size=image_size[0], max_size=image_size[1], always_apply=True),
         scale=hyp.scale,
         translate=hyp.translate,
-        fill_value=114,
+        value=114,
+        mask_value=0,
         bbox_params=None,
         p=hyp['mosaic']
     )
@@ -105,6 +104,7 @@ def create_dataloader(path,
             rotate_limit=(0, 0),
             border_mode=cv2.BORDER_CONSTANT,
             value=(114, 114, 114),
+            mask_value=0,
             position=RandomShiftScaleRotate.PositionType.TOP_LEFT,
             always_apply=True),
         A.HueSaturationValue(always_apply=True),

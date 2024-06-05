@@ -29,7 +29,7 @@ class ResizeShortLongest(DualTransform):
         original_min_size = min(original_size)
         original_max_size = max(original_size)
         ratio = round(min(min_size / original_min_size, max_size / original_max_size), 5)
-        resize_mask = cv2.resize(mask, None, fx=ratio, fy=ratio)
+        resize_mask = cv2.resize(mask, None, fx=ratio, fy=ratio, interpolation=cv2.INTER_NEAREST)
         return resize_mask
 
     def get_params(self) -> Dict[str, Any]:

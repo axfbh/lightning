@@ -86,7 +86,7 @@ class _Mosaic(DualTransform):
             width,
             read_fn: Union[BasicTransform, BaseCompose, Callable],
             reference_data,
-            fill_value=0,
+            value=0,
             mask_value=0,
             always_apply=False,
             p=0.5,
@@ -99,7 +99,7 @@ class _Mosaic(DualTransform):
         self.reference_data = reference_data
         self.height = height
         self.width = width
-        self.fill_value = fill_value
+        self.value = value
         self.mask_value = mask_value
 
     def apply(self,
@@ -112,7 +112,7 @@ class _Mosaic(DualTransform):
               **params):
         image_cache = [data['image'] for data in mosaic_data]
         image_cache.append(image)
-        image, self.padh_cache, self.padw_cache = F.mosaic4(image_cache, x_center, y_center, height, width, self.fill_value)
+        image, self.padh_cache, self.padw_cache = F.mosaic4(image_cache, x_center, y_center, height, width, self.value)
         return image
 
     def apply_to_mask(self,
@@ -184,7 +184,7 @@ class Mosaic:
             reference_data,
             scale=0.5,
             translate=0.1,
-            fill_value=0,
+            value=0,
             mask_value=0,
             bbox_params=BboxParams(format='pascal_voc', label_fields=['classes']),
             p=0.5):
@@ -194,7 +194,7 @@ class Mosaic:
                 width=width,
                 read_fn=read_fn,
                 reference_data=reference_data,
-                fill_value=fill_value,
+                value=value,
                 mask_value=mask_value,
                 always_apply=True),
             RandomShiftScaleRotate(
