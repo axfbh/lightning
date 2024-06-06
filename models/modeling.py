@@ -114,7 +114,7 @@ class Unet(LightningModule):
     def training_step(self, batch, batch_idx):
         images, masks = batch
         x = self(images)
-        loss = self.compute_loss(x, masks)
+        loss = self.compute_loss(x, masks) * self.trainer.train_dataloader.batch_size
         self.log('cnt_loss', loss, on_epoch=True, sync_dist=True, batch_size=self.trainer.train_dataloader.batch_size)
         return loss * self.trainer.accumulate_grad_batches * self.trainer.world_size
 

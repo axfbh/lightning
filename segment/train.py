@@ -25,14 +25,14 @@ def parse_opt():
     parser.add_argument("--hyp", type=str, default="../data/hyp/hyp-yolo-low.yaml", help="hyperparameters path")
 
     # -------------- 参数值 --------------
-    parser.add_argument("--epochs", type=int, default=301, help="total training epochs")
-    parser.add_argument("--batch-size", type=int, default=8, help="total batch size for all GPUs")
-    parser.add_argument("--image-size", type=list, default=[640, 640], help="train, val image size HxW")
+    parser.add_argument("--epochs", type=int, default=300, help="total training epochs")
+    parser.add_argument("--batch-size", type=int, default=2, help="total batch size for all GPUs")
+    parser.add_argument("--image-size", type=list, default=[512, 512], help="train, val image size HxW")
     parser.add_argument("--resume", nargs="?", const=True, default=False, help="resume most recent training")
     parser.add_argument("--device", default="gpu", help="cpu, gpu, tpu, ipu, hpu, mps, auto")
     parser.add_argument("--single-cls", action="store_true", help="train multi-class data as single-class")
     parser.add_argument("--optimizer", type=str, choices=["SGD", "Adam", "AdamW"],
-                        default="SGD",
+                        default="AdamW",
                         help="optimizer")
     parser.add_argument("--scheduler", type=str, choices=["Cosine", "MultiStep", "Polynomial", "OneLinearLR"],
                         default="OneLinearLR",

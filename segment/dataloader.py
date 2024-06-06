@@ -61,8 +61,8 @@ class MyDataSet(Dataset):
             sample = self.transform(**sample)
             # mask = sample['mask']
             # io.show('image', cv2.hconcat([sample['image'], cv2.merge([mask, mask, mask])]))
-        sample = self.normal(**sample)
 
+        sample = self.normal(**sample)
         image = ToTensorV2()(image=sample['image'])['image'].float()
         mask = torch.LongTensor(sample['mask'])
 
