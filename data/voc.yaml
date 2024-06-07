@@ -10,9 +10,6 @@
 # Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
 train: 'D:\cgm\dataset\VOC2007'
 val: 'D:\cgm\dataset\VOC2007'
-test:
-  path: './data/voctest.txt'
-  root: 'D:\cgm\dataset\VOC2007\JPEGImages'
 
 
 names:
@@ -37,27 +34,3 @@ names:
   18: sofa
   19: train
   20: tvmonitor
-
-# RGB
-colors:
-  background: [ 0, 0, 0 ]
-  aeroplane: [ 128, 0, 0 ]
-  bicycle: [ 0, 128, 0 ]
-  bird: [ 128, 128, 0 ]
-  boat: [ 0, 0, 128 ]
-  bottle: [ 128, 0, 128 ]
-  bus: [ 0, 128, 128 ]
-  car: [ 128, 128, 128 ]
-  cat: [ 64, 0, 0 ]
-  chair: [ 192, 0, 0 ]
-  cow: [ 64, 128, 0 ]
-  diningtable: [ 192, 128, 0 ]
-  dog: [ 64, 0, 128 ]
-  horse: [ 192, 0, 128 ]
-  motorbike: [ 64, 128, 128 ]
-  person: [ 192, 128, 128 ]
-  pottedplant: [ 0, 64, 0 ]
-  sheep: [ 128, 64, 0 ]
-  sofa: [ 0, 192, 0 ]
-  train: [ 128, 192, 0 ]
-  tv/monitor: [ 0, 64, 128 ]

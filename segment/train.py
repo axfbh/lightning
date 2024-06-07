@@ -21,7 +21,7 @@ def parse_opt():
     parser.add_argument("--weights", default='./runs/train/version_6/checkpoints/last.pt',
                         help="resume most recent training")
     # parser.add_argument("--cfg", type=str, default="./models/yolo.yaml", help="models.yaml path")
-    parser.add_argument("--data", type=str, default="../data/voc.yaml", help="dataset.yaml path")
+    parser.add_argument("--data", type=str, default="../data/voc-seg.yaml", help="dataset.yaml path")
     parser.add_argument("--hyp", type=str, default="../data/hyp/hyp-yolo-low.yaml", help="hyperparameters path")
 
     # -------------- 参数值 --------------
