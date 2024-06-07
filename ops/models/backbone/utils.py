@@ -5,6 +5,7 @@ from ops.models.backbone import elandarknet
 from typing import Optional, List, Union
 import torch.nn as nn
 from torchvision.models._utils import IntermediateLayerGetter
+from torchvision.models.mobilenetv3 import MobileNetV3
 
 
 def _cspdarknet_extractor(
@@ -81,5 +82,22 @@ def _elandarknet_extractor(
     if min(returned_layers) <= 0 or max(returned_layers) >= 5:
         raise ValueError(f"Each returned layer should be in the range [1,5]. Got {returned_layers}")
     return_layers = {f"stage{k}": str(v) for v, k in enumerate(returned_layers)}
+
+    return IntermediateLayerGetter(backbone, return_layers)
+
+
+def _mobilenet_extractor(
+        backbone,
+        trainable_layers: int):
+    # select layers that won't be frozen
+    if trainable_layers < 0 or trainable_layers > 1:
+        raise ValueError(f"Trainable layers should be in the range [0,1], got {trainable_layers}")
+    layers_to_train = ["features"][:trainable_layers]
+
+    for name, parameter in backbone.named_parameters():
+        if all([not name.startswith(layer) for layer in layers_to_train]):
+            parameter.requires_grad_(False)
+
+    return_layers = {f"features": '0'}
 
     return IntermediateLayerGetter(backbone, return_layers)
