@@ -127,7 +127,7 @@ class CSPDarknetV2(nn.Module):
         # -----------------------------------------------#
 
         CBM.keywords['activation_layer'] = nn.SiLU
-        DownSampleLayer = partial(CBM, kernel_size=3, stride=2, inplace=False)
+        DownSampleLayer = partial(CBM, kernel_size=3, stride=2)
 
         # -----------------------------------------------#
         #   利用focus网络结构进行特征提取
