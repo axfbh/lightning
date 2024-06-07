@@ -45,7 +45,7 @@ class Unet(LightningModule):
             ))
             self.up_module.append(make_two_conv([base_channels, base_channels], in_channels))
 
-        self.out = nn.Conv2d(base_channels, self.num_classes, 1, 1, 0)
+        self.head = nn.Conv2d(base_channels, self.num_classes, 1, 1, 0)
 
     def forward(self, x):
         sampling = []
@@ -61,7 +61,7 @@ class Unet(LightningModule):
             x = up(x)
             x = conv(torch.cat([x4, x], 1))
 
-        return self.out(x)
+        return self.head(x)
 
     def training_step(self, batch, batch_idx):
         images, masks = batch
