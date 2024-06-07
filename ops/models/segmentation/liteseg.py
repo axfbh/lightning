@@ -11,6 +11,8 @@ class LiteSeg(nn.Module):
 
         self.aspp = ASPP(1280, 96, [3, 6, 9])
 
+        self.head = nn.Conv2d(96, num_classes, kernel_size=1)
+
     def forward(self, x):
         x = self.backbone(x)
         x = self.aspp(x)
