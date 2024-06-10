@@ -107,8 +107,8 @@ def _shufflenet_extractor(
         backbone,
         trainable_layers: int):
     # select layers that won't be frozen
-    if trainable_layers < 0 or trainable_layers > 1:
-        raise ValueError(f"Trainable layers should be in the range [0,1], got {trainable_layers}")
+    if trainable_layers < 0 or trainable_layers > 6:
+        raise ValueError(f"Trainable layers should be in the range [0,6], got {trainable_layers}")
     layers_to_train = ["conv1",
                        'maxpool',
                        'stage2',

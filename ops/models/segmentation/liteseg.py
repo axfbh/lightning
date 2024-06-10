@@ -19,7 +19,7 @@ class LiteSeg(LightningModule):
         super(LiteSeg, self).__init__()
         self.num_classes = num_classes
 
-        self.backbone = _shufflenet_extractor(shufflenet_v2_x2_0(pretrained=True), 1)
+        self.backbone = _shufflenet_extractor(shufflenet_v2_x2_0(pretrained=True), 6)
 
         self.aspp = ASPP(2048, 96, [3, 6, 9])
 
