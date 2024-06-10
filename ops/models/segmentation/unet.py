@@ -2,12 +2,12 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-from lightning.pytorch.utilities.types import STEP_OUTPUT, OptimizerLRScheduler
 from torchvision.ops.misc import Conv2dNormActivation
 from functools import partial
 from lightning import LightningModule
 from ops.utils.torch_utils import ModelEMA, smart_optimizer, smart_scheduler
-from ops.loss.dice_loss import DiceLoss
+from ops.metric.SegmentationMetric import Evaluator
+from ops.utils.torch_utils import from_torch_to_numpy
 
 CBR = partial(Conv2dNormActivation, norm_layer=nn.BatchNorm2d, activation_layer=nn.ReLU)
 
@@ -45,7 +45,7 @@ class Unet(LightningModule):
             ))
             self.up_module.append(make_two_conv([base_channels, base_channels], in_channels))
 
-        self.out = nn.Conv2d(base_channels, self.num_classes, 1, 1, 0)
+        self.head = nn.Conv2d(base_channels, self.num_classes, 1, 1, 0)
 
     def forward(self, x):
         sampling = []
@@ -61,18 +61,48 @@ class Unet(LightningModule):
             x = up(x)
             x = conv(torch.cat([x4, x], 1))
 
-        return self.out(x)
+        return self.head(x)
 
     def training_step(self, batch, batch_idx):
         images, masks = batch
         x = self(images)
-        masks = masks.permute([0, 3, 1, 2]).contiguous()
-        loss = self.compute_loss(x, masks)
-        self.log('dice_loss', loss, on_epoch=True, sync_dist=True, batch_size=self.trainer.train_dataloader.batch_size)
+        loss = self.compute_loss(x, masks) * self.trainer.train_dataloader.batch_size
+        self.log('cnt_loss', loss, on_epoch=True, sync_dist=True, batch_size=self.trainer.train_dataloader.batch_size)
+        return loss * self.trainer.accumulate_grad_batches * self.trainer.world_size
+
+    def validation_step(self, batch, batch_idx):
+        images, masks = batch
+        preds = self.ema_model(images)
+        loss = self.compute_loss(preds, masks)
+
+        if not self.trainer.sanity_checking:
+            self.mask_metric.add_batch(from_torch_to_numpy(masks), from_torch_to_numpy(preds.argmax(1)))
+
         return loss
+
+    def on_validation_epoch_end(self) -> None:
+        if not self.trainer.sanity_checking:
+            Acc = self.mask_metric.Pixel_Accuracy()
+            Acc_class = self.mask_metric.Pixel_Accuracy_Class()
+            mIoU = self.mask_metric.Mean_Intersection_over_Union()
+            FWIoU = self.mask_metric.Frequency_Weighted_Intersection_over_Union()
+
+            fitness = mIoU * 0.9 + 0.1 * Acc_class
+
+            self.log_dict({'Acc': Acc,
+                           'Acc_class': Acc_class,
+                           'mIoU': mIoU,
+                           'FWIoU': FWIoU,
+                           'fitness_un': fitness},
+                          on_epoch=True, sync_dist=True, batch_size=self.trainer.val_dataloaders.batch_size)
+
+            self.mask_metric.reset()
 
     def on_train_batch_end(self, outputs, batch: Any, batch_idx: int) -> None:
         self.ema_model.update(self)
+
+    def configure_model(self) -> None:
+        self.mask_metric = Evaluator(self.n_classes)
 
     def configure_optimizers(self):
         optimizer = smart_optimizer(self,
@@ -94,4 +124,4 @@ class Unet(LightningModule):
         return [optimizer], [scheduler]
 
     def on_fit_start(self) -> None:
-        self.compute_loss = DiceLoss()
+        self.compute_loss = nn.CrossEntropyLoss(ignore_index=255)

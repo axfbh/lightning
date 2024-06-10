@@ -6,20 +6,27 @@ class Evaluator(object):
         self.num_class = num_class
         self.confusion_matrix = np.zeros((self.num_class,) * 2)
 
+    # 像素准确率PA，预测正确的像素/总像素
     def Pixel_Accuracy(self):
         Acc = np.diag(self.confusion_matrix).sum() / self.confusion_matrix.sum()
         return Acc
 
+    # 类别平均像素准确率MPA，对每一类的像素准确率求平均
     def Pixel_Accuracy_Class(self):
         Acc = np.diag(self.confusion_matrix) / self.confusion_matrix.sum(axis=1)
         Acc = np.nanmean(Acc)
         return Acc
 
+    # MIoU
     def Mean_Intersection_over_Union(self):
-        MIoU = np.diag(self.confusion_matrix) / (
-                np.sum(self.confusion_matrix, axis=1) + np.sum(self.confusion_matrix, axis=0) -
-                np.diag(self.confusion_matrix))
-        MIoU = np.nanmean(MIoU)
+        # Intersection = TP Union = TP + FP + FN
+        # IoU = TP / (TP + FP + FN)
+        intersection = np.diag(self.confusion_matrix)
+        union = (np.sum(self.confusion_matrix, axis=1) +
+                 np.sum(self.confusion_matrix, axis=0) -
+                 np.diag(self.confusion_matrix))
+        IoU = intersection / union
+        MIoU = np.nanmean(IoU)
         return MIoU
 
     def Frequency_Weighted_Intersection_over_Union(self):
