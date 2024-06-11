@@ -31,7 +31,7 @@ def parse_opt():
     parser.add_argument("--device", default="gpu", help="cuda device, i.e. 0 or 0,1,2,3 or cpu")
     parser.add_argument("--single-cls", action="store_true", help="train multi-class data as single-class")
     parser.add_argument("--optimizer", type=str, choices=["SGD", "Adam", "AdamW"],
-                        default="SGD",
+                        default="Adam",
                         help="optimizer")
     parser.add_argument("--scheduler", type=str, choices=["Cosine", "MultiStep", "Polynomial", "OneCycleLR"],
                         default="Cosine",
@@ -61,13 +61,14 @@ def setup(opt, hyp):
                                warmup_momentum=hyp['warmup_momentum'])
 
     trainer = Trainer(
-        device=opt.device,
         max_epochs=opt.epochs,
         save_dir=opt.project,
         names=opt.name,
+        device=opt.device,
+        nproc_per_node=1,
         accumulate=accumulate,
-        bar_train_title=("loss",),
-        bar_val_title=("F1", "P", "R", "Accuracy"),
+        bar_train_title=("box_loss", "obj_loss", "cls_loss"),
+        bar_val_title=("Images", "Instances", "P", "R", "mAP50", "mAP50-95"),
         callbacks=[warmup_callback]
     )
 
@@ -79,6 +80,8 @@ def setup(opt, hyp):
 
 def main(opt):
     hyp = OmegaConf.load(Path(opt.hyp))
+    # cfg = OmegaConf.load(Path(opt.cfg))
+    # data = OmegaConf.load(Path(opt.data))
     trainer = setup(opt, hyp)
 
     model = ResNet(planes=[64, 128, 256, 512],
@@ -87,32 +90,25 @@ def main(opt):
                    num_classes=10)
 
     model.hyp = hyp
-    model.optim = opt.optimizer
-    model.sche = opt.scheduler
+    model.opt = opt
 
     model.save_hyperparameters(dict(vars(opt), **hyp))
 
     train_loader = create_dataloader('',
                                      opt.image_size,
                                      opt.batch_size,
-                                     '',
-                                     image_set=True,
                                      augment=True,
                                      workers=opt.workers,
                                      shuffle=True,
-                                     persistent_workers=True,
-                                     seed=opt.seed)
+                                     persistent_workers=True)
 
     val_loader = create_dataloader('',
                                    opt.image_size,
                                    opt.batch_size * 2,
-                                   '',
-                                   image_set=False,
                                    augment=False,
                                    workers=opt.workers,
                                    shuffle=False,
-                                   persistent_workers=True,
-                                   seed=opt.seed)
+                                   persistent_workers=True)
 
     trainer.fit(model=model,
                 train_dataloaders=train_loader,
@@ -120,12 +116,5 @@ def main(opt):
                 ckpt_path=opt.weights if opt.resume else None)
 
 
-def init_parallel_process():
-    os.environ['MASTER_ADDR'] = extract_ip()
-    os.environ['MASTER_PORT'] = '51899'
-    os.environ['NODE_RANK'] = '0'
-
-
 if __name__ == '__main__':
-    # init_parallel_process()
     main(parse_opt())

@@ -24,44 +24,36 @@ def seed_worker(worker_id):
 def create_dataloader(path,
                       image_size,
                       batch_size,
-                      names,
-                      image_set=None,
-                      hyp=None,
                       augment=False,
-                      local_rank=0,
                       rank=0,
-                      num_nodes=1,
                       workers=3,
                       shuffle=False,
-                      persistent_workers=False,
-                      seed=0):
+                      persistent_workers=False):
     mean = [0.5070751592371323, 0.48654887331495095, 0.4409178433670343]
     std = [0.2673342858792401, 0.2564384629170883, 0.27615047132568404]
 
-    transform = transforms.Compose(
-        [transforms.ToTensor(),
-         transforms.Normalize(mean, std)])
+    if image_size:
+        transform = transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomRotation(15),  # 数据增强
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean, std=std)])
+    else:
+        transform = transforms.Compose(
+            [transforms.ToTensor(),
+             transforms.Normalize(mean, std)])
 
-    # transform = A.Compose([
-    #     A.Normalize(),
-    #     ToTensorV2(),
-    # ])
-
-    # if augment:
-    #     LOGGER.info(f"{colorstr('albumentations: ')}" + ", ".join(
-    #         f"{x}".replace("always_apply=False, ", "") for x in transform if x.p))
-
-    # with torch_distributed_zero_first(local_rank, num_nodes):  # init dataset *.cache only once if DDP
     dataset = datasets.CIFAR10(r"D:\Desktop\backbone_exp\data\cifar-10-batches-py",
-                               train=image_set,
+                               train=augment,
                                transform=transform,
                                download=True)
 
     batch_size = min(batch_size, len(dataset))
     nd = torch.cuda.device_count()  # number of CUDA devices
     nw = min([os.cpu_count() // max(nd, 1), batch_size if batch_size > 1 else 0, workers])  # number of workers
-    generator = torch.Generator()
-    generator.manual_seed(6148914691236517205 + seed + rank)
+    # generator = torch.Generator()
+    # generator.manual_seed(6148914691236517205 + seed + rank)
 
     return DataLoader(dataset=dataset,
                       batch_size=batch_size,
@@ -69,6 +61,7 @@ def create_dataloader(path,
                       num_workers=nw,
                       pin_memory=PIN_MEMORY,
                       # collate_fn=detect_collate_fn,
-                      worker_init_fn=seed_worker,
+                      # worker_init_fn=seed_worker,
                       persistent_workers=persistent_workers,
-                      generator=generator)
+                      # generator=generator
+                      )
