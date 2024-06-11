@@ -3,8 +3,8 @@ import argparse
 from pathlib import Path
 from omegaconf import OmegaConf
 
-# from models.modeling import ResNet
-from ops.models.backbone.resnet import ResNet
+from models.modeling2 import RModle
+# from ops.models.backbone.resnet import ResNet
 from dataloader import create_dataloader
 
 from ops.utils import extract_ip
@@ -22,7 +22,7 @@ def parse_opt():
                         help="resume most recent training")
     # parser.add_argument("--cfg", type=str, default="./models/yolo.yaml", help="models.yaml path")
     # parser.add_argument("--data", type=str, default="./data/voc.yaml", help="dataset.yaml path")
-    parser.add_argument("--hyp", type=str, default="../data/hyp/hyp-yolo-v7-low.yaml", help="hyperparameters path")
+    parser.add_argument("--hyp", type=str, default="../data/hyp/hyp-yolo-low.yaml", help="hyperparameters path")
 
     # -------------- 参数值 --------------
     parser.add_argument("--epochs", type=int, default=300, help="total training epochs")
@@ -68,8 +68,8 @@ def setup(opt, hyp):
         device=opt.device,
         nproc_per_node=1,
         accumulate=accumulate,
-        bar_train_title=("box_loss", "obj_loss", "cls_loss"),
-        bar_val_title=("Images", "Instances", "P", "R", "mAP50", "mAP50-95"),
+        bar_train_title=("cnt_loss",),
+        bar_val_title=("Acc",),
         callbacks=[warmup_callback]
     )
 
@@ -85,7 +85,7 @@ def main(opt):
     # data = OmegaConf.load(Path(opt.data))
     trainer = setup(opt, hyp)
 
-    model = ResNet(planes=[64, 128, 256, 512],
+    model = RModle(planes=[64, 128, 256, 512],
                    layers=[3, 4, 6, 3],
                    strides=[1, 2, 2, 2],
                    num_classes=100)
