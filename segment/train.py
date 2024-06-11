@@ -10,6 +10,7 @@ from ops.utils.callbacks import WarmupLR
 from ops.utils.trainer import Trainer
 # from ops.models.segmentation.unet import Unet
 from models.modeling import Unet
+from ops.models.segmentation.liteseg import LiteSeg
 
 from lightning.fabric.utilities.rank_zero import rank_zero_info
 
@@ -26,13 +27,13 @@ def parse_opt():
 
     # -------------- 参数值 --------------
     parser.add_argument("--epochs", type=int, default=300, help="total training epochs")
-    parser.add_argument("--batch-size", type=int, default=2, help="total batch size for all GPUs")
+    parser.add_argument("--batch-size", type=int, default=8, help="total batch size for all GPUs")
     parser.add_argument("--image-size", type=list, default=[512, 512], help="train, val image size HxW")
     parser.add_argument("--resume", nargs="?", const=True, default=True, help="resume most recent training")
     parser.add_argument("--device", default="gpu", help="cpu, gpu, tpu, ipu, hpu, mps, auto")
     parser.add_argument("--single-cls", action="store_true", help="train multi-class data as single-class")
     parser.add_argument("--optimizer", type=str, choices=["SGD", "Adam", "AdamW"],
-                        default="AdamW",
+                        default="SGD",
                         help="optimizer")
     parser.add_argument("--scheduler", type=str, choices=["Cosine", "MultiStep", "Polynomial", "OneLinearLR"],
                         default="OneLinearLR",
@@ -84,7 +85,7 @@ def main(opt):
     data = OmegaConf.load(Path(opt.data))
     trainer = setup(opt, hyp)
 
-    model = Unet(n_channels=3, n_classes=21)
+    model = LiteSeg(num_classes=21)
     model.hyp = hyp
     model.opt = opt
 
