@@ -3,7 +3,8 @@ import argparse
 from pathlib import Path
 from omegaconf import OmegaConf
 
-from models.modeling import ResNet
+# from models.modeling import ResNet
+from ops.models.backbone.resnet import ResNet
 from dataloader import create_dataloader
 
 from ops.utils import extract_ip
@@ -87,7 +88,7 @@ def main(opt):
     model = ResNet(planes=[64, 128, 256, 512],
                    layers=[3, 4, 6, 3],
                    strides=[1, 2, 2, 2],
-                   num_classes=10)
+                   num_classes=100)
 
     model.hyp = hyp
     model.opt = opt
