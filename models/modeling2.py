@@ -47,7 +47,7 @@ class RModle(LightningModule):
                            'fitness_un': fitness},
                           on_epoch=True, sync_dist=True, batch_size=self.trainer.val_dataloaders.batch_size)
 
-            self.mask_metric.reset()
+            self.arr.clear()
 
     def on_train_batch_end(self, outputs, batch: Any, batch_idx: int) -> None:
         self.ema_model.update(self)

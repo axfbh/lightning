@@ -44,7 +44,7 @@ def create_dataloader(path,
             [transforms.ToTensor(),
              transforms.Normalize(mean, std)])
 
-    dataset = datasets.CIFAR100(r"D:\Desktop\backbone_exp\data\cifar-10-batches-py",
+    dataset = datasets.CIFAR100(r"D:\dataset\cifa100",
                                train=augment,
                                transform=transform,
                                download=True)

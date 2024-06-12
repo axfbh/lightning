@@ -21,7 +21,7 @@ def parse_opt():
     parser.add_argument("--weights", default='./runs/train1/checkpoints/last.pt',
                         help="resume most recent training")
     # parser.add_argument("--cfg", type=str, default="./models/yolo.yaml", help="models.yaml path")
-    # parser.add_argument("--data", type=str, default="./data/voc.yaml", help="dataset.yaml path")
+    parser.add_argument("--data", type=str, default="../data/cifa100.yaml", help="dataset.yaml path")
     parser.add_argument("--hyp", type=str, default="../data/hyp/hyp-yolo-low.yaml", help="hyperparameters path")
 
     # -------------- 参数值 --------------
@@ -35,7 +35,7 @@ def parse_opt():
                         default="Adam",
                         help="optimizer")
     parser.add_argument("--scheduler", type=str, choices=["Cosine", "MultiStep", "Polynomial", "OneCycleLR"],
-                        default="Cosine",
+                        default="OneLinearLR",
                         help="scheduler")
     parser.add_argument("--sync-bn", action="store_true", help="use SyncBatchNorm, only available in DDP mode")
     parser.add_argument("--workers", type=int, default=3, help="max dataloader workers (per RANK in DDP mode)")
@@ -82,7 +82,7 @@ def setup(opt, hyp):
 def main(opt):
     hyp = OmegaConf.load(Path(opt.hyp))
     # cfg = OmegaConf.load(Path(opt.cfg))
-    # data = OmegaConf.load(Path(opt.data))
+    data = OmegaConf.load(Path(opt.data))
     trainer = setup(opt, hyp)
 
     model = RModle(planes=[64, 128, 256, 512],
@@ -95,7 +95,7 @@ def main(opt):
 
     model.save_hyperparameters(dict(vars(opt), **hyp))
 
-    train_loader = create_dataloader('',
+    train_loader = create_dataloader(Path(data.train),
                                      opt.image_size,
                                      opt.batch_size,
                                      augment=True,
@@ -103,7 +103,7 @@ def main(opt):
                                      shuffle=True,
                                      persistent_workers=True)
 
-    val_loader = create_dataloader('',
+    val_loader = create_dataloader(Path(data.val),
                                    opt.image_size,
                                    opt.batch_size * 2,
                                    augment=False,

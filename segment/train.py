@@ -23,11 +23,11 @@ def parse_opt():
                         help="resume most recent training")
     # parser.add_argument("--cfg", type=str, default="./models/yolo.yaml", help="models.yaml path")
     parser.add_argument("--data", type=str, default="../data/voc-seg.yaml", help="dataset.yaml path")
-    parser.add_argument("--hyp", type=str, default="../data/hyp/hyp-yolo-low.yaml", help="hyperparameters path")
+    parser.add_argument("--hyp", type=str, default="../data/hyp/hyp-unet-low.yaml", help="hyperparameters path")
 
     # -------------- 参数值 --------------
     parser.add_argument("--epochs", type=int, default=300, help="total training epochs")
-    parser.add_argument("--batch-size", type=int, default=8, help="total batch size for all GPUs")
+    parser.add_argument("--batch-size", type=int, default=64, help="total batch size for all GPUs")
     parser.add_argument("--image-size", type=list, default=[512, 512], help="train, val image size HxW")
     parser.add_argument("--resume", nargs="?", const=True, default=False, help="resume most recent training")
     parser.add_argument("--device", default="gpu", help="cpu, gpu, tpu, ipu, hpu, mps, auto")

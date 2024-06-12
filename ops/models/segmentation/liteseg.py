@@ -2,7 +2,7 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-from torchvision.models.shufflenetv2 import shufflenet_v2_x2_0
+from torchvision.models.shufflenetv2 import shufflenet_v2_x2_0, ShuffleNet_V2_X2_0_Weights
 from torchvision.ops.misc import Conv2dNormActivation
 
 from lightning import LightningModule
@@ -19,7 +19,7 @@ class LiteSeg(LightningModule):
         super(LiteSeg, self).__init__()
         self.num_classes = num_classes
 
-        self.backbone = _shufflenet_extractor(shufflenet_v2_x2_0(pretrained=True), 6)
+        self.backbone = _shufflenet_extractor(shufflenet_v2_x2_0(weights=ShuffleNet_V2_X2_0_Weights), 6)
 
         self.aspp = ASPP(2048, 96, [3, 6, 9])
 
