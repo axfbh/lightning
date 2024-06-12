@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 import math
-from ops.models.backbone.cspdarknet import CSPDarknetV2, CBM, WrapLayer
+from ops.models.backbone.cspdarknet import CSPDarknetV5, CBM, WrapLayer
 from ops.models.backbone.utils import _cspdarknet_extractor
 from ops.models.head.yolo_head import YoloV5Head
 from ops.models.detection.utils import Yolo
@@ -31,7 +31,7 @@ class YoloV5(Yolo):
         #   40,40,512
         #   20,20,1024
         # ---------------------------------------------------#
-        self.backbone = _cspdarknet_extractor(CSPDarknetV2(base_channels, base_depth), 5)
+        self.backbone = _cspdarknet_extractor(CSPDarknetV5(base_channels, base_depth), 5)
 
         self.upsample = nn.Upsample(scale_factor=2, mode="nearest")
 

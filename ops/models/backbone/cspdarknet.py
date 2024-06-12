@@ -197,9 +197,9 @@ class CSPDarknetV5(nn.Module):
         return x
 
 
-class CSPDarknetV3(nn.Module):
+class CSPDarknetV8(nn.Module):
     def __init__(self, base_channels=64, base_depth=3, num_classes=1000):
-        super(CSPDarknetV3, self).__init__()
+        super(CSPDarknetV8, self).__init__()
 
         CBM.keywords['activation_layer'] = nn.SiLU
         DownSampleLayer = partial(CBM, kernel_size=3, stride=2)

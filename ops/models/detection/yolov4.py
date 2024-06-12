@@ -1,6 +1,6 @@
 import torch.nn as nn
 import torch
-from ops.models.backbone.cspdarknet import CSPDarknetV1, CBM
+from ops.models.backbone.cspdarknet import CSPDarknetV4, CBM
 from ops.models.backbone.utils import _cspdarknet_extractor
 from ops.models.head.yolo_head import YoloV4Head
 from ops.models.neck.spp import SPP
@@ -52,7 +52,7 @@ class YoloV4(Yolo):
         base_channels = int(width_multiple * 32)  # 64
         base_depth = max(round(depth_multiple * 3), 1)  # 3
 
-        self.backbone = _cspdarknet_extractor(CSPDarknetV1(base_channels, base_depth), 5)
+        self.backbone = _cspdarknet_extractor(CSPDarknetV4(base_channels, base_depth), 5)
 
         self.cov1 = make_three_conv([base_channels * 16, base_channels * 32], base_channels * 32)
         self.spp = SPP([5, 9, 13])
