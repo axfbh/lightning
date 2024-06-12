@@ -8,6 +8,7 @@ import math
 from utils.utils import make_grid
 from torchvision.ops.misc import Conv2dNormActivation
 from utils.anchor_utils import AnchorGenerator
+from ops.models.misc.dfl import DFL
 
 
 class YoloV8Head(nn.Module):
