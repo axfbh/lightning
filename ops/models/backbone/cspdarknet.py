@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 from functools import partial
 from torchvision.ops.misc import Conv2dNormActivation
-from ops.models.neck.spp import SPP, SPPF
+from ops.models.neck.spp import SPP, SPPFV5
 
 BN = partial(nn.BatchNorm2d, eps=0.001, momentum=0.03)
 CBM = partial(Conv2dNormActivation, bias=False, inplace=True, norm_layer=BN, activation_layer=nn.Mish)
@@ -49,9 +49,9 @@ class WrapLayer(nn.Module):
         return out
 
 
-class CSPDarknetV1(nn.Module):
+class CSPDarknetV4(nn.Module):
     def __init__(self, base_channels=64, base_depth=3, num_classes=1000):
-        super(CSPDarknetV1, self).__init__()
+        super(CSPDarknetV4, self).__init__()
 
         DownSampleLayer = partial(CBM, kernel_size=3, stride=2)
 
@@ -117,9 +117,9 @@ class Focus(nn.Module):
         return self.conv(torch.cat([x[..., ::2, ::2], x[..., 1::2, ::2], x[..., ::2, 1::2], x[..., 1::2, 1::2]], 1))
 
 
-class CSPDarknetV2(nn.Module):
+class CSPDarknetV5(nn.Module):
     def __init__(self, base_channels=64, base_depth=3, num_classes=1000):
-        super(CSPDarknetV2, self).__init__()
+        super(CSPDarknetV5, self).__init__()
 
         # -----------------------------------------------#
         #   输入图片是640, 640, 3
@@ -166,7 +166,7 @@ class CSPDarknetV2(nn.Module):
         # -----------------------------------------------#
         self.crossStagePartial4 = nn.Sequential(
             DownSampleLayer(base_channels * 8, base_channels * 16),
-            SPPF(base_channels * 16, base_channels * 16, conv_layer=CBM),
+            SPPFV5(base_channels * 16, base_channels * 16, conv_layer=CBM),
             WrapLayer(base_channels * 16, base_channels * 16, base_depth, shortcut=False),
         )
 

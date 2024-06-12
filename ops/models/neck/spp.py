@@ -16,7 +16,7 @@ class SPP(nn.Module):
         return torch.cat([m(x) for m in self.make_layers], 1)
 
 
-class SPPF(nn.Module):
+class SPPFV1(nn.Module):
     # Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv3 by Glenn Jocher
     def __init__(self, c1, c2, ksizes=(5, 9, 13), conv_layer=None,
                  activation_layer=nn.ReLU):  # equivalent to SPP(k=(5, 9, 13))
