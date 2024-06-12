@@ -4,12 +4,13 @@ from omegaconf import OmegaConf
 
 from dataloader import create_dataloader
 
-from ops.models.detection import YoloV5, YoloV4, YoloV7
+from ops.models.detection import YoloV5, YoloV4, YoloV7, YoloV8
 from ops.utils.logging import print_args, colorstr
 from ops.utils.callbacks import WarmupLR
 from ops.utils.trainer import Trainer
 
 from lightning.fabric.utilities.rank_zero import rank_zero_info
+
 
 def parse_opt():
     parser = argparse.ArgumentParser()
@@ -81,8 +82,9 @@ def main(opt):
     data = OmegaConf.load(Path(opt.data))
     trainer = setup(opt, hyp)
 
+    model = YoloV8(num_classes=cfg.nc, phi='l')
     # model = YoloV7(anchors=cfg.anchors, num_classes=cfg.nc, phi='l')
-    model = YoloV5(anchors=cfg.anchors, num_classes=cfg.nc, phi='n')
+    # model = YoloV5(anchors=cfg.anchors, num_classes=cfg.nc, phi='n')
     # model = YoloV4(anchors=cfg.anchors, num_classes=cfg.nc, phi='n')
 
     model.hyp = hyp

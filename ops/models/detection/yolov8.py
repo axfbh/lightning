@@ -4,13 +4,13 @@ import torch.nn as nn
 import math
 from ops.models.backbone.cspdarknet import CSPDarknetV8, CBM, C3
 from ops.models.backbone.utils import _cspdarknet_extractor
-from ops.models.head.yolo_head import YoloV5Head
+from ops.models.head.yolo_head import YoloV8Head
 from ops.models.detection.utils import Yolo
-from ops.loss.yolo_loss import YoloLossV5
+from ops.loss.yolo_loss import YoloLossV8
 
 
 class YoloV8(Yolo):
-    def __init__(self, anchors, num_classes, phi):
+    def __init__(self, num_classes, phi):
         super(YoloV8, self).__init__()
 
         width_multiple = {'n': 0.25, 's': 0.50, 'm': 0.75, 'l': 1.0, 'x': 1.25}[phi]
@@ -44,9 +44,7 @@ class YoloV8(Yolo):
         self.down_sample2 = CBM(base_channels * 8, base_channels * 8, 3, 2)
         self.conv3_for_downsample2 = C3(base_channels * 16, base_channels * 16, base_depth, shortcut=False)
 
-        self.head = YoloV5Head([base_channels * 4, base_channels * 8, base_channels * 16],
-                               anchors,
-                               num_classes)
+        self.head = YoloV8Head([base_channels * 4, base_channels * 8, base_channels * 16], num_classes=num_classes)
 
     def forward(self, x):
         _, _, H, W = x.size()
@@ -86,4 +84,4 @@ class YoloV8(Yolo):
         return self.head([P3, P4, P5], H, W)
 
     def on_fit_start(self) -> None:
-        self.compute_loss = YoloLossV5(self)
+        self.compute_loss = YoloLossV8(self)

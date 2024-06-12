@@ -1,16 +1,17 @@
 import torch
 import torch.nn as nn
 from abc import abstractmethod
-from utils.iou import bbox_iou, iou_loss
+from utils.iou import bbox_iou, iou_loss, box_convert
 from ops.loss.basic_loss import BasicLoss
 from ops.metric.DetectionMetric import smooth_BCE
+from utils.anchor_utils import AnchorGenerator
 
 torch.set_printoptions(precision=4, sci_mode=False)
 
 
-class YoloLoss(BasicLoss):
+class YoloAnchorBasedLoss(BasicLoss):
     def __init__(self, model):
-        super(YoloLoss, self).__init__(model)
+        super(YoloAnchorBasedLoss, self).__init__(model)
 
         m = model.head
         self.cp, self.cn = smooth_BCE(eps=self.hyp.get('label_smoothing', 0.0))
@@ -32,7 +33,33 @@ class YoloLoss(BasicLoss):
         raise NotImplemented
 
 
-class YoloLossV3(YoloLoss):
+class YoloAnchorFreeLoss(BasicLoss):
+    def __init__(self, model):
+        super(YoloAnchorFreeLoss, self).__init__(model)
+
+        m = model.head
+        self.cp, self.cn = smooth_BCE(eps=self.hyp.get('label_smoothing', 0.0))
+
+        self.nl = m.nl
+        self.nc = m.nc
+        self.no = m.no
+        self.reg_max = m.reg_max
+
+        self.anchors = AnchorGenerator([10, 20, 40], [1, 1, 1])
+
+        self.use_dfl = m.reg_max > 1
+
+        self.balance = [4.0, 1.0, 0.4]
+
+        # Define criteria
+        self.bce = nn.BCEWithLogitsLoss(reduction="none")
+
+    @abstractmethod
+    def build_targets(self, targets, grids, image_size):
+        raise NotImplemented
+
+
+class YoloLossV3(YoloAnchorBasedLoss):
     def build_targets(self, p, targets, image_size):
 
         tcls, txy, twh, indices = [], [], [], []
@@ -140,7 +167,7 @@ class YoloLossV3(YoloLoss):
         return (lxy + lwh + lobj + lcls) * bs, torch.cat((lxy, lwh, lobj, lcls)).detach()
 
 
-class YoloLossV4(YoloLoss):
+class YoloLossV4(YoloAnchorBasedLoss):
 
     def build_targets(self, p, targets, image_size):
         tcls, tbox, indices, anch = [], [], [], []
@@ -245,7 +272,7 @@ class YoloLossV4(YoloLoss):
         return (lbox + lobj + lcls) * bs, torch.cat((lbox, lobj, lcls)).detach()
 
 
-class YoloLossV5(YoloLoss):
+class YoloLossV5(YoloAnchorBasedLoss):
     def build_targets(self, p, targets, image_size):
         tcls, tbox, indices, anch = [], [], [], []
 
@@ -388,7 +415,7 @@ class YoloLossV5(YoloLoss):
         return (lbox + lobj + lcls) * bs, torch.cat((lbox, lobj, lcls)).detach()
 
 
-class YoloLossV7(YoloLoss):
+class YoloLossV7(YoloAnchorBasedLoss):
 
     def build_targets(self, p, targets, image_size):
         tcls, tbox, indices, anch = [], [], [], []
@@ -520,3 +547,104 @@ class YoloLossV7(YoloLoss):
         lcls *= self.hyp["cls"]
 
         return (lbox + lobj + lcls) * bs, torch.cat((lbox, lobj, lcls)).detach()
+
+
+class YoloLossV8(YoloAnchorFreeLoss):
+
+    def build_targets(self, p, targets, image_size):
+        tcls, tbox, indices, anch = [], [], [], []
+
+        gain = torch.ones(6, device=targets.device)  # normalized to gridspace gain
+
+        xyxy = box_convert(targets[:, 2:], in_fmt='cxcywh', out_fmt='xyxy')
+
+        targets = torch.cat([targets[:, :2], xyxy], -1)
+
+        anchors, strides = self.anchors(image_size, p)
+
+        for i in range(self.nl):
+
+            stride = strides[i].flip(0)  # H,W -> W,H
+
+            anchor = anchors[i]
+
+            anchor_centers = (anchor[:, :2] + anchor[:, 2:]) / 2  # N
+
+            # ----------- grid 大小 -----------
+            (bs, _), ng, _ = torch.as_tensor(p[i].shape, device=self.device).split(2)
+
+            # ----------- 网格 ——----------
+            x, y = torch.tensor([[0, 0],
+                                 [1, 0],
+                                 [0, 1],
+                                 [-1, 0],
+                                 [0, -1]], device=self.device, dtype=torch.float32).mul(1.0).chunk(2, 1)
+
+            identity = torch.zeros_like(x)
+
+            # ----------- 锚框映射到 grid 大小 -----------
+            anchor = self.anchors[i] / stride
+
+            na = len(anchor)
+
+            # ----------- 归一化的 坐标和长宽 -----------
+            gain[2:] = (1 / stride)[[1, 0, 1, 0]]
+
+            t = torch.Tensor(size=(0, 9)).to(self.device)
+
+            for si in range(bs):
+                tb = targets[targets[:, 0] == si] * gain
+
+                nb, cls, cx, cy, gw, gh = tb.unbind(1)
+
+                # ----------- 选择目标点 1 格距离内的网格用于辅助预测 -----------
+                tb = torch.stack([nb - identity,
+                                  cls - identity,
+                                  cx - identity,
+                                  cy - identity,
+                                  cx - x,
+                                  cy - y,
+                                  gw - identity,
+                                  gh - identity],
+                                 -1)
+
+                j = torch.bitwise_and(0 <= tb[..., 4:6], tb[..., 4:6] < ng[[1, 0]]).all(-1)
+                tb = tb[j]
+
+                ai = torch.arange(na, device=self.device).view(na, 1).repeat(1, len(tb))
+
+                tb = torch.cat((tb.repeat(na, 1, 1), ai[:, :, None]), 2)
+
+                t = torch.cat([t, tb], 0)
+
+            # ----------- 分别提取信息，生成 -----------
+            b, c = t[:, :2].long().t()
+
+            gxy = t[:, 2:4]
+
+            gwh = t[:, 6:8]
+
+            gij = t[:, 4:6].long()
+
+            gi, gj = gij.t()
+
+            a = t[:, 8].long()
+
+            indices.append([b, a, gj, gi])
+
+            tbox.append(torch.cat([gxy - gij, gwh], 1))
+
+            anch.append(anchor[a])
+
+            tcls.append(c)
+
+        return tcls, tbox, indices, anch
+
+    def forward(self, preds, targets, image_size):
+        bs = preds[0].shape[0]
+
+        lcls = torch.zeros(1, dtype=torch.float32, device=self.device)
+        lbox = torch.zeros(1, dtype=torch.float32, device=self.device)
+        lobj = torch.zeros(1, dtype=torch.float32, device=self.device)
+
+        tcls, tbox, indices, anchors = self.build_targets(preds, targets, image_size)

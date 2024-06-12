@@ -1,11 +1,13 @@
 import torch.nn as nn
 
 from typing import List
+from functools import partial
+
 import torch
 import math
 from utils.utils import make_grid
 from torchvision.ops.misc import Conv2dNormActivation
-from functools import partial
+from utils.anchor_utils import AnchorGenerator
 
 
 class YoloV8Head(nn.Module):
@@ -38,6 +40,8 @@ class YoloV8Head(nn.Module):
                     nn.Conv2d(c3, self.no, 1, 1, 0),
                 )
             )
+
+        self.anchor = AnchorGenerator([10, 20, 40], [1, 1, 1])
 
         self.reset_parameters()
 
