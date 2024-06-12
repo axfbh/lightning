@@ -42,6 +42,7 @@ class YoloV8Head(nn.Module):
             )
 
         self.anchor = AnchorGenerator([10, 20, 40], [1, 1, 1])
+        self.dfl = DFL(self.reg_max) if self.reg_max > 1 else nn.Identity()
 
         self.reset_parameters()
 
