@@ -15,6 +15,7 @@ class YoloV8(Yolo):
 
         width_multiple = {'n': 0.25, 's': 0.50, 'm': 0.75, 'l': 1.0, 'x': 1.25}[phi]
         depth_multiple = {'n': 0.33, 's': 0.33, 'm': 0.67, 'l': 1.0, 'x': 1.0}[phi]
+        deep_mul = {'n': 1.00, 's': 1.00, 'm': 0.75, 'l': 0.50, 'x': 0.50, }[phi]
 
         base_channels = int(width_multiple * 64)  # 64
         base_depth = max(round(depth_multiple * 3), 1)  # 3
@@ -30,19 +31,31 @@ class YoloV8(Yolo):
         #   40,40,512
         #   20,20,1024
         # ---------------------------------------------------#
-        self.backbone = _cspdarknet_extractor(CSPDarknetV8(base_channels, base_depth), 5)
+        self.backbone = _cspdarknet_extractor(CSPDarknetV8(base_channels, base_depth, deep_mul), 5)
 
         self.upsample = nn.Upsample(scale_factor=2, mode="nearest")
 
-        self.conv3_for_upsample1 = C2f(base_channels * 16, base_channels * 8, base_depth, shortcut=False)
+        self.conv3_for_upsample1 = C2f(int(base_channels * 16 * deep_mul) + base_channels * 8,
+                                       base_channels * 8,
+                                       base_depth,
+                                       shortcut=False)
 
-        self.conv3_for_upsample2 = C2f(base_channels * 8, base_channels * 4, base_depth, shortcut=False)
+        self.conv3_for_upsample2 = C2f(base_channels * 8 + base_channels * 4,
+                                       base_channels * 4,
+                                       base_depth,
+                                       shortcut=False)
 
         self.down_sample1 = CBM(base_channels * 4, base_channels * 4, 3, 2)
-        self.conv3_for_downsample1 = C2f(base_channels * 8, base_channels * 8, base_depth, shortcut=False)
+        self.conv3_for_downsample1 = C2f(base_channels * 8 + base_channels * 4,
+                                         base_channels * 8,
+                                         base_depth,
+                                         shortcut=False)
 
         self.down_sample2 = CBM(base_channels * 8, base_channels * 8, 3, 2)
-        self.conv3_for_downsample2 = C2f(base_channels * 16, base_channels * 16, base_depth, shortcut=False)
+        self.conv3_for_downsample2 = C2f(int(base_channels * 16 * deep_mul) + base_channels * 8,
+                                         base_channels * 16,
+                                         base_depth,
+                                         shortcut=False)
 
         self.head = YoloV8Head([base_channels * 4, base_channels * 8, base_channels * 16], num_classes=num_classes)
 

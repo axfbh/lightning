@@ -33,11 +33,11 @@ class YoloV8Head(nn.Module):
             )
         self.cls_head = nn.ModuleList()
         for in_channels in in_channels_list:
-            self.reg_head.append(
+            self.cls_head.append(
                 nn.Sequential(
                     CBS(in_channels, c3, 3),
                     CBS(c3, c3, 3),
-                    nn.Conv2d(c3, self.no, 1, 1, 0),
+                    nn.Conv2d(c3, self.nc, 1, 1, 0),
                 )
             )
 
@@ -62,6 +62,7 @@ class YoloV8Head(nn.Module):
             x[i] = torch.cat((self.reg_head[i](x[i]), self.cls_head[i](x[i])), 1)
         if self.training:  # Training path
             return x
+        return x, 1
 
 
 class YoloV7Head(nn.Module):

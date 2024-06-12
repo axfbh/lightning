@@ -217,7 +217,7 @@ class CSPDarknetV5(nn.Module):
 
 
 class CSPDarknetV8(nn.Module):
-    def __init__(self, base_channels: int = 64, base_depth: int = 3, num_classes=1000):
+    def __init__(self, base_channels: int = 64, base_depth: int = 3, deep_mul=1.0, num_classes=1000):
         super(CSPDarknetV8, self).__init__()
 
         CBM.keywords['activation_layer'] = nn.SiLU
@@ -241,9 +241,9 @@ class CSPDarknetV8(nn.Module):
         )
 
         self.crossStagePartial4 = nn.Sequential(
-            DownSampleLayer(base_channels * 8, base_channels * 16),
-            C2f(base_channels * 16, base_channels * 16, base_depth),
-            SPPF(base_channels * 16, base_channels * 16, [5], conv_layer=CBM),
+            DownSampleLayer(base_channels * 8, int(base_channels * 16 * deep_mul)),
+            C2f(int(base_channels * 16 * deep_mul), int(base_channels * 16 * deep_mul), base_depth),
+            SPPF(int(base_channels * 16 * deep_mul), int(base_channels * 16 * deep_mul), [5], conv_layer=CBM),
         )
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
