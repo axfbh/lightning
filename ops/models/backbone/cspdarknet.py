@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 from functools import partial
 from torchvision.ops.misc import Conv2dNormActivation
-from ops.models.neck.spp import SPP, SPPFV5
+from ops.models.neck.spp import SPPFV5
 
 BN = partial(nn.BatchNorm2d, eps=0.001, momentum=0.03)
 CBM = partial(Conv2dNormActivation, bias=False, inplace=True, norm_layer=BN, activation_layer=nn.Mish)
@@ -203,3 +203,13 @@ class CSPDarknetV8(nn.Module):
 
         CBM.keywords['activation_layer'] = nn.SiLU
         DownSampleLayer = partial(CBM, kernel_size=3, stride=2)
+
+        self.stem = CBM(3, base_channels, 3, 2)
+
+    def reset_parameters(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
