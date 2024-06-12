@@ -4,6 +4,60 @@ from typing import List
 import torch
 import math
 from utils.utils import make_grid
+from torchvision.ops.misc import Conv2dNormActivation
+from functools import partial
+
+
+class YoloV8Head(nn.Module):
+    def __init__(self, in_channels_list: List, num_classes: int):
+        super(YoloV8Head, self).__init__()
+
+        CBS = partial(Conv2dNormActivation, activation_layer=nn.SiLU)
+
+        self.nc = num_classes  # number of classes
+        self.nl = len(in_channels_list)  # number of detection layers
+        self.reg_max = 16  # DFL channels (ch[0] // 16 to scale 4/8/12/16/20 for n/s/m/l/x)
+        c2 = max(16, in_channels_list[0] // 4, self.reg_max * 4)  # number of outputs per anchor
+        c3 = max(in_channels_list[0], min(self.nc, 100))  # channels
+        self.no = num_classes + self.reg_max * 4
+        self.reg_head = nn.ModuleList()
+        for in_channels in in_channels_list:
+            self.reg_head.append(
+                nn.Sequential(
+                    CBS(in_channels, c2, 3),
+                    CBS(c2, c2, 3),
+                    nn.Conv2d(c2, 4 * self.reg_max, 1, 1, 0),
+                )
+            )
+        self.cls_head = nn.ModuleList()
+        for in_channels in in_channels_list:
+            self.reg_head.append(
+                nn.Sequential(
+                    CBS(in_channels, c3, 3),
+                    CBS(c3, c3, 3),
+                    nn.Conv2d(c3, self.no, 1, 1, 0),
+                )
+            )
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        stride = [8, 16, 32]
+        """Initialize Detect() biases, WARNING: requires stride availability."""
+        m = self  # self.model[-1]  # Detect() module
+        # cf = torch.bincount(torch.tensor(np.concatenate(dataset.labels, 0)[:, 0]).long(), minlength=nc) + 1
+        # ncf = math.log(0.6 / (m.nc - 0.999999)) if cf is None else torch.log(cf / cf.sum())  # nominal class frequency
+        for a, b, s in zip(m.reg_head, m.cls_head, stride):  # from
+            a[-1].bias.data[:] = 1.0  # box
+            b[-1].bias.data[: m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
+
+    def forward(self, x: List, H, W):
+        z = []  # inference output
+        imgsze = torch.tensor([W, H], device=x[0].device)
+        for i in range(self.nl):
+            x[i] = torch.cat((self.reg_head[i](x[i]), self.cls_head[i](x[i])), 1)
+        if self.training:  # Training path
+            return x
 
 
 class YoloV7Head(nn.Module):

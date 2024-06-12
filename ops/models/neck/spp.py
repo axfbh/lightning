@@ -16,33 +16,10 @@ class SPP(nn.Module):
         return torch.cat([m(x) for m in self.make_layers], 1)
 
 
-class SPPFV5(nn.Module):
+class SPPF(nn.Module):
     # Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv3 by Glenn Jocher
-    def __init__(self, c1, c2, ksizes=(5, 9, 13), conv_layer=None,
-                 activation_layer=nn.ReLU):  # equivalent to SPP(k=(5, 9, 13))
-        super(SPPFV5, self).__init__()
-
-        Conv = partial(Conv2dNormActivation,
-                       bias=False,
-                       inplace=False,
-                       norm_layer=nn.BatchNorm2d,
-                       activation_layer=activation_layer) if conv_layer is None else conv_layer
-
-        c_ = c1 // 2  # hidden channels
-        self.cv1 = Conv(c1, c_, 1, 1)
-        self.cv2 = Conv(c_ * (len(ksizes) + 1), c2, 1, 1)
-        self.m = SPP(ksizes)
-
-    def forward(self, x):
-        x = self.cv1(x)
-        return self.cv2(torch.cat((x, self.m(x)), 1))
-
-
-class SPPFV8(nn.Module):
-    # Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv3 by Glenn Jocher
-    def __init__(self, c1, c2, ksizes=(5, 9, 13), conv_layer=None,
-                 activation_layer=nn.ReLU):  # equivalent to SPP(k=(5, 9, 13))
-        super(SPPFV8, self).__init__()
+    def __init__(self, c1, c2, ksizes=(5, 9, 13), conv_layer=None, activation_layer=nn.ReLU):
+        super(SPPF, self).__init__()
 
         Conv = partial(Conv2dNormActivation,
                        bias=False,

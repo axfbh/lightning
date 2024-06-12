@@ -1,21 +1,23 @@
+from typing import Tuple, Union
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
 from functools import partial
 from torchvision.ops.misc import Conv2dNormActivation
-from ops.models.neck.spp import SPPFV5
+from ops.models.neck.spp import SPPF
 
 BN = partial(nn.BatchNorm2d, eps=0.001, momentum=0.03)
 CBM = partial(Conv2dNormActivation, bias=False, inplace=True, norm_layer=BN, activation_layer=nn.Mish)
 
 
 class ResidualLayer(nn.Module):
-    def __init__(self, in_ch, out_ch, shortcut=True):
+    def __init__(self, c1, c2, k: Union[Tuple[Tuple, Tuple], Tuple], shortcut: bool = True, expand_ratio=0.5):
         super(ResidualLayer, self).__init__()
+        c_ = int(c2 * expand_ratio)
         self.shortcut = shortcut
         self.conv = nn.Sequential(
-            CBM(in_ch, out_ch, 1),
-            CBM(out_ch, in_ch, 3)
+            CBM(c1, c_, k[0]),
+            CBM(c_, c2, k[1])
         )
 
     def forward(self, x):
@@ -23,16 +25,17 @@ class ResidualLayer(nn.Module):
 
 
 class C3(nn.Module):
-    def __init__(self, c1, c2, count=1, shortcut=True, first=False):
+    def __init__(self, c1, c2, count=1, shortcut=True, expand_ratio=0.5):
         super(C3, self).__init__()
-        c_ = c1 if first else c1 // 2
+        # c_ = c1 if first else c1 // 2
+        c_ = int(c2 * expand_ratio)
         self.trans_0 = CBM(c1, c_, 1)
 
         self.trans_1 = CBM(c1, c_, 1)
 
-        self.make_layers = nn.ModuleList()
+        self.make_layers = nn.Sequential()
         for _ in range(count):
-            self.make_layers.append(ResidualLayer(c_, c_, shortcut))
+            self.make_layers.append(ResidualLayer(c_, c_, ((3, 3), (1, 1)), shortcut, expand_ratio=1))
 
         self.trans_cat = CBM(c_ * 2, c2, 1)
 
@@ -41,8 +44,7 @@ class C3(nn.Module):
         out0 = self.trans_0(x)
         out1 = self.trans_1(x)
 
-        for conv in self.make_layers:
-            out0 = conv(out0)
+        out0 = self.make_layers(out0)
 
         out = torch.cat([out0, out1], 1)
         out = self.trans_cat(out)
@@ -50,8 +52,20 @@ class C3(nn.Module):
 
 
 class C2f(nn.Module):
-    def __init__(self, c1, c2, count=1, shortcut=True, first=False):
+    def __init__(self, c1, c2, count=1, shortcut=True, expand_ratio=0.5):
         super(C2f, self).__init__()
+        self.c = int(c2 * expand_ratio)
+        self.cv1 = CBM(c1, 2 * self.c, 1, 1)
+        self.cv2 = CBM((2 + count) * self.c, c2, 1)  # optional act=FReLU(c2)
+
+        self.make_layers = nn.ModuleList()
+        for _ in range(count):
+            self.make_layers.append(ResidualLayer(self.c, self.c, ((3, 3), (3, 3)), shortcut, expand_ratio=1))
+
+    def forward(self, x):
+        y = list(self.cv1(x).chunk(2, 1))
+        y.extend(m(y[-1]) for m in self.make_layers)
+        return self.cv2(torch.cat(y, 1))
 
 
 class CSPDarknetV4(nn.Module):
@@ -63,7 +77,7 @@ class CSPDarknetV4(nn.Module):
         self.stem = nn.Sequential(
             CBM(3, base_channels, 3),
             DownSampleLayer(base_channels, base_channels * 2),
-            C3(base_channels * 2, base_channels * 2, base_depth * 1, first=True),
+            C3(base_channels * 2, base_channels * 2, base_depth * 1, expand_ratio=1),
         )
 
         self.crossStagePartial1 = nn.Sequential(
@@ -138,7 +152,7 @@ class CSPDarknetV5(nn.Module):
         #   利用focus网络结构进行特征提取
         #   640, 640, 3 -> 320, 320, 12 -> 320, 320, 64
         # -----------------------------------------------#
-        self.stem = Focus(3, base_channels, 3) if base_channels < 64 else CBM(3, base_channels, 6, 2)  # 大模型使用
+        self.stem = CBM(3, base_channels, 6, 2)
         # -----------------------------------------------#
         #   完成卷积之后，320, 320, 64 -> 160, 160, 128
         #   完成CSPlayer之后，160, 160, 128 -> 160, 160, 128
@@ -171,12 +185,12 @@ class CSPDarknetV5(nn.Module):
         # -----------------------------------------------#
         self.crossStagePartial4 = nn.Sequential(
             DownSampleLayer(base_channels * 8, base_channels * 16),
-            SPPFV5(base_channels * 16, base_channels * 16, conv_layer=CBM),
-            C3(base_channels * 16, base_channels * 16, base_depth, shortcut=False),
+            C3(base_channels * 16, base_channels * 16, base_depth),
+            SPPF(base_channels * 16, base_channels * 16, [5], conv_layer=CBM),
         )
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(base_channels * 32, num_classes)
+        self.fc = nn.Linear(base_channels * 16, num_classes)
 
         self.reset_parameters()
 
@@ -203,7 +217,7 @@ class CSPDarknetV5(nn.Module):
 
 
 class CSPDarknetV8(nn.Module):
-    def __init__(self, base_channels=64, base_depth=3, num_classes=1000):
+    def __init__(self, base_channels: int = 64, base_depth: int = 3, num_classes=1000):
         super(CSPDarknetV8, self).__init__()
 
         CBM.keywords['activation_layer'] = nn.SiLU
@@ -213,8 +227,29 @@ class CSPDarknetV8(nn.Module):
 
         self.crossStagePartial1 = nn.Sequential(
             DownSampleLayer(base_channels, base_channels * 2),
-            WrapLayer(base_channels * 2, base_channels * 2, base_depth),
+            C2f(base_channels * 2, base_channels * 2, base_depth),
         )
+
+        self.crossStagePartial2 = nn.Sequential(
+            DownSampleLayer(base_channels * 2, base_channels * 4),
+            C2f(base_channels * 4, base_channels * 4, base_depth),
+        )
+
+        self.crossStagePartial3 = nn.Sequential(
+            DownSampleLayer(base_channels * 4, base_channels * 8),
+            C2f(base_channels * 8, base_channels * 8, base_depth),
+        )
+
+        self.crossStagePartial4 = nn.Sequential(
+            DownSampleLayer(base_channels * 8, base_channels * 16),
+            C2f(base_channels * 16, base_channels * 16, base_depth),
+            SPPF(base_channels * 16, base_channels * 16, [5], conv_layer=CBM),
+        )
+
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(base_channels * 16, num_classes)
+
+        self.reset_parameters()
 
     def reset_parameters(self):
         for m in self.modules():
@@ -223,3 +258,16 @@ class CSPDarknetV8(nn.Module):
             elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
+
+    def forward(self, x):
+        x = self.stem(x)
+        x = self.crossStagePartial1(x)
+        x = self.crossStagePartial2(x)
+        x = self.crossStagePartial3(x)
+        x = self.crossStagePartial4(x)
+
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+
+        return x

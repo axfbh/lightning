@@ -8,7 +8,7 @@ from ops.models.head.fcos_head import FCOSHead
 
 
 class FCOS(nn.Module):
-    def __init__(self, num_classes, anchors, aspect_ratios):
+    def __init__(self, num_classes, anchors=(8, 16, 32, 64, 128), aspect_ratios=(1, 1, 1, 1, 1)):
         super(FCOS, self).__init__()
 
         weights_backbone = ResNet50_Weights.IMAGENET1K_V1
