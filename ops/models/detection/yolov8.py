@@ -15,7 +15,7 @@ class YoloV8(Yolo):
 
         width_multiple = {'n': 0.25, 's': 0.50, 'm': 0.75, 'l': 1.0, 'x': 1.25}[phi]
         depth_multiple = {'n': 0.33, 's': 0.33, 'm': 0.67, 'l': 1.0, 'x': 1.0}[phi]
-        deep_mul = {'n': 1.00, 's': 1.00, 'm': 0.75, 'l': 0.50, 'x': 0.50, }[phi]
+        deep_mul = {'n': 1.00, 's': 1.00, 'm': 0.75, 'l': 0.50, 'x': 0.50}[phi]
 
         base_channels = int(width_multiple * 64)  # 64
         base_depth = max(round(depth_multiple * 3), 1)  # 3
