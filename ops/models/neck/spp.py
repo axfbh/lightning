@@ -30,14 +30,12 @@ class SPPF(nn.Module):
 
         c_ = c1 // 2  # hidden channels
         self.cv1 = Conv(c1, c_, 1, 1)
-        self.cv2 = Conv(c_ * 4, c2, 1, 1)
+        self.cv2 = Conv(c_ * (len(ksizes) + 1), c2, 1, 1)
         self.m = SPP(ksizes)
 
     def forward(self, x):
         x = self.cv1(x)
-        y1 = self.m(x)
-        y2 = self.m(y1)
-        return self.cv2(torch.cat((x, y1, y2, self.m(y2)), 1))
+        return self.cv2(torch.cat((x, self.m(x)), 1))
 
 
 class SPPCSPC(nn.Module):

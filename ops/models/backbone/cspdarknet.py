@@ -166,8 +166,8 @@ class CSPDarknetV2(nn.Module):
         # -----------------------------------------------#
         self.crossStagePartial4 = nn.Sequential(
             DownSampleLayer(base_channels * 8, base_channels * 16),
-            WrapLayer(base_channels * 16, base_channels * 16, base_depth),
-            SPPF(base_channels * 16, base_channels * 16, [5], conv_layer=CBM),
+            SPPF(base_channels * 16, base_channels * 16, conv_layer=CBM),
+            WrapLayer(base_channels * 16, base_channels * 16, base_depth, shortcut=False),
         )
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
@@ -195,3 +195,11 @@ class CSPDarknetV2(nn.Module):
         x = self.fc(x)
 
         return x
+
+
+class CSPDarknetV3(nn.Module):
+    def __init__(self, base_channels=64, base_depth=3, num_classes=1000):
+        super(CSPDarknetV3, self).__init__()
+
+        CBM.keywords['activation_layer'] = nn.SiLU
+        DownSampleLayer = partial(CBM, kernel_size=3, stride=2)
