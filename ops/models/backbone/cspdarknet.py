@@ -133,7 +133,7 @@ class CSPDarknetV2(nn.Module):
         #   利用focus网络结构进行特征提取
         #   640, 640, 3 -> 320, 320, 12 -> 320, 320, 64
         # -----------------------------------------------#
-        self.stem = CBM(3, base_channels, 6, 2)
+        self.stem = Focus(3, base_channels, 3) if base_channels < 64 else CBM(3, base_channels, 6, 2)  # 大模型使用
         # -----------------------------------------------#
         #   完成卷积之后，320, 320, 64 -> 160, 160, 128
         #   完成CSPlayer之后，160, 160, 128 -> 160, 160, 128
