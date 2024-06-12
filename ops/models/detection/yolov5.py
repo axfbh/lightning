@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 import math
-from ops.models.backbone.cspdarknet import CSPDarknetV5, CBM, WrapLayer
+from ops.models.backbone.cspdarknet import CSPDarknetV5, CBM, C3
 from ops.models.backbone.utils import _cspdarknet_extractor
 from ops.models.head.yolo_head import YoloV5Head
 from ops.models.detection.utils import Yolo
@@ -36,16 +36,16 @@ class YoloV5(Yolo):
         self.upsample = nn.Upsample(scale_factor=2, mode="nearest")
 
         self.conv_for_feat3 = CBM(base_channels * 16, base_channels * 8, 1, 1)
-        self.conv3_for_upsample1 = WrapLayer(base_channels * 16, base_channels * 8, base_depth, shortcut=False)
+        self.conv3_for_upsample1 = C3(base_channels * 16, base_channels * 8, base_depth, shortcut=False)
 
         self.conv_for_feat2 = CBM(base_channels * 8, base_channels * 4, 1, 1)
-        self.conv3_for_upsample2 = WrapLayer(base_channels * 8, base_channels * 4, base_depth, shortcut=False)
+        self.conv3_for_upsample2 = C3(base_channels * 8, base_channels * 4, base_depth, shortcut=False)
 
         self.down_sample1 = CBM(base_channels * 4, base_channels * 4, 3, 2)
-        self.conv3_for_downsample1 = WrapLayer(base_channels * 8, base_channels * 8, base_depth, shortcut=False)
+        self.conv3_for_downsample1 = C3(base_channels * 8, base_channels * 8, base_depth, shortcut=False)
 
         self.down_sample2 = CBM(base_channels * 8, base_channels * 8, 3, 2)
-        self.conv3_for_downsample2 = WrapLayer(base_channels * 16, base_channels * 16, base_depth, shortcut=False)
+        self.conv3_for_downsample2 = C3(base_channels * 16, base_channels * 16, base_depth, shortcut=False)
 
         self.head = YoloV5Head([base_channels * 4, base_channels * 8, base_channels * 16],
                                anchors,

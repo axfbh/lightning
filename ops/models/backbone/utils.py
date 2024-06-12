@@ -9,7 +9,7 @@ from torchvision.models.mobilenetv3 import MobileNetV3
 
 
 def _cspdarknet_extractor(
-        backbone: Union[cspdarknet.CSPDarknetV1, cspdarknet.CSPDarknetV2],
+        backbone: Union[cspdarknet.CSPDarknetV4, cspdarknet.CSPDarknetV5],
         trainable_layers: int,
         returned_layers: Optional[List[int]] = None):
     # select layers that won't be frozen
