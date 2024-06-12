@@ -20,7 +20,7 @@ class SPPFV5(nn.Module):
     # Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv3 by Glenn Jocher
     def __init__(self, c1, c2, ksizes=(5, 9, 13), conv_layer=None,
                  activation_layer=nn.ReLU):  # equivalent to SPP(k=(5, 9, 13))
-        super().__init__()
+        super(SPPFV5, self).__init__()
 
         Conv = partial(Conv2dNormActivation,
                        bias=False,
@@ -42,7 +42,7 @@ class SPPFV8(nn.Module):
     # Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv3 by Glenn Jocher
     def __init__(self, c1, c2, ksizes=(5, 9, 13), conv_layer=None,
                  activation_layer=nn.ReLU):  # equivalent to SPP(k=(5, 9, 13))
-        super().__init__()
+        super(SPPFV8, self).__init__()
 
         Conv = partial(Conv2dNormActivation,
                        bias=False,

@@ -49,6 +49,11 @@ class C3(nn.Module):
         return out
 
 
+class C2f(nn.Module):
+    def __init__(self, c1, c2, count=1, shortcut=True, first=False):
+        super(C2f, self).__init__()
+
+
 class CSPDarknetV4(nn.Module):
     def __init__(self, base_channels=64, base_depth=3, num_classes=1000):
         super(CSPDarknetV4, self).__init__()
