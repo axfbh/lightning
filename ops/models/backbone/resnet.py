@@ -133,8 +133,6 @@ class ResNet(nn.Module):
         self.base_width = width_per_group
         self.group = group
 
-        self.att = GlobalReceptiveField(3 * 4, 3 * 4, 16)
-
         self.cna1 = Conv2dNormActivation(in_channels=3,
                                          out_channels=self.inplane,
                                          kernel_size=7,
@@ -169,7 +167,6 @@ class ResNet(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
-        x = x + self.att(x)
         x = self.cna1(x)
         x = self.maxpool(x)
 
