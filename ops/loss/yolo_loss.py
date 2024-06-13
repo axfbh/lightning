@@ -563,80 +563,16 @@ class YoloLossV8(YoloAnchorFreeLoss):
         anchors, strides = self.anchors(image_size, p)
 
         for i in range(self.nl):
-
             stride = strides[i].flip(0)  # H,W -> W,H
 
             anchor = anchors[i]
 
             anchor_centers = (anchor[:, :2] + anchor[:, 2:]) / 2  # N
 
+            x, y = anchor_centers.chunk(2, 1)
+
             # ----------- grid 大小 -----------
             (bs, _), ng, _ = torch.as_tensor(p[i].shape, device=self.device).split(2)
-
-            # ----------- 网格 ——----------
-            x, y = torch.tensor([[0, 0],
-                                 [1, 0],
-                                 [0, 1],
-                                 [-1, 0],
-                                 [0, -1]], device=self.device, dtype=torch.float32).mul(1.0).chunk(2, 1)
-
-            identity = torch.zeros_like(x)
-
-            # ----------- 锚框映射到 grid 大小 -----------
-            anchor = self.anchors[i] / stride
-
-            na = len(anchor)
-
-            # ----------- 归一化的 坐标和长宽 -----------
-            gain[2:] = (1 / stride)[[1, 0, 1, 0]]
-
-            t = torch.Tensor(size=(0, 9)).to(self.device)
-
-            for si in range(bs):
-                tb = targets[targets[:, 0] == si] * gain
-
-                nb, cls, cx, cy, gw, gh = tb.unbind(1)
-
-                # ----------- 选择目标点 1 格距离内的网格用于辅助预测 -----------
-                tb = torch.stack([nb - identity,
-                                  cls - identity,
-                                  cx - identity,
-                                  cy - identity,
-                                  cx - x,
-                                  cy - y,
-                                  gw - identity,
-                                  gh - identity],
-                                 -1)
-
-                j = torch.bitwise_and(0 <= tb[..., 4:6], tb[..., 4:6] < ng[[1, 0]]).all(-1)
-                tb = tb[j]
-
-                ai = torch.arange(na, device=self.device).view(na, 1).repeat(1, len(tb))
-
-                tb = torch.cat((tb.repeat(na, 1, 1), ai[:, :, None]), 2)
-
-                t = torch.cat([t, tb], 0)
-
-            # ----------- 分别提取信息，生成 -----------
-            b, c = t[:, :2].long().t()
-
-            gxy = t[:, 2:4]
-
-            gwh = t[:, 6:8]
-
-            gij = t[:, 4:6].long()
-
-            gi, gj = gij.t()
-
-            a = t[:, 8].long()
-
-            indices.append([b, a, gj, gi])
-
-            tbox.append(torch.cat([gxy - gij, gwh], 1))
-
-            anch.append(anchor[a])
-
-            tcls.append(c)
 
         return tcls, tbox, indices, anch
 
@@ -648,3 +584,7 @@ class YoloLossV8(YoloAnchorFreeLoss):
         lobj = torch.zeros(1, dtype=torch.float32, device=self.device)
 
         tcls, tbox, indices, anchors = self.build_targets(preds, targets, image_size)
+
+        pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
+            (self.reg_max * 4, self.nc), 1
+        )
