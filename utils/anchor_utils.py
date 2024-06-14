@@ -5,6 +5,15 @@ from torchvision.models.detection.anchor_utils import AnchorGenerator as AG
 
 
 class AnchorGenerator(AG):
+    """
+    sizes and aspect_ratios should have the same number of elements, and it should
+    correspond to the number of feature maps.
+
+    sizes[i] and aspect_ratios[i] can have an arbitrary number of elements,
+    and AnchorGenerator will output a set of sizes[i] * aspect_ratios[i] anchors
+    per spatial location for feature map i.
+    """
+
     def __init__(
             self,
             sizes=((128, 256, 512),),
@@ -75,7 +84,7 @@ def bbox2dist(anchor_points, bbox, reg_max):
     return torch.cat((anchor_points - x1y1, x2y2 - anchor_points), -1).clamp_(0, reg_max - 0.01)  # dist (lt, rb)
 
 
-# if __name__ == '__main__':
+if __name__ == '__main__':
     # anchor_generator = AnchorGenerator([8, 16, 32, 64, 128], [1, 1, 1, 1, 1])
     # an1 = anchor_generator([800, 1216],
     #                        [torch.rand((100, 152)),64*
@@ -84,14 +93,17 @@ def bbox2dist(anchor_points, bbox, reg_max):
     #                         torch.rand((13, 19)),
     #                         torch.rand((7, 10))])
 
-    # anchor_generator = AnchorGenerator([10, 20, 40], [1, 1, 1])
-    # an1, _ = anchor_generator([640, 640],
-    #                           [torch.rand((64, 64)),
-    #                            torch.rand((32, 32)),
-    #                            torch.rand((16, 16))])
-    # print(an1)
-    #
-    # an2, _ = make_anchors([torch.rand((1, 3, 64, 64)),
-    #                        torch.rand((1, 3, 32, 32)),
-    #                        torch.rand((1, 3, 16, 16))], [10, 20, 40], grid_cell_offset=0.5)
-    # print(an2)
+    anchor_generator = AnchorGenerator([0, 0, 0], [1, 1, 1])
+    an1, _ = anchor_generator([640, 640],
+                              [torch.rand((64, 64)),
+                               torch.rand((32, 32)),
+                               torch.rand((16, 16))])
+    an1 = [a / s for a, s in zip(an1, [10, 20, 40])]
+    an1 = torch.cat(an1, 0) + 0.5
+    anchor_centers = (an1[:, :2] + an1[:, 2:]) / 2  # N
+    print(anchor_centers, anchor_centers.shape)
+
+    an2, _ = make_anchors([torch.rand((1, 3, 64, 64)),
+                           torch.rand((1, 3, 32, 32)),
+                           torch.rand((1, 3, 16, 16))], [10, 20, 40], grid_cell_offset=0.5)
+    print(an2, an2.shape)

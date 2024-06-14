@@ -560,6 +560,95 @@ class YoloLossV8(YoloAnchorFreeLoss):
             pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_dist.dtype))
         return dist2bbox(pred_dist, anchor_points, xywh=False)[0]
 
+    @staticmethod
+    def select_candidates_in_gts(tb, eps=1e-9):
+        ltrb_off = tb[..., 4:]
+        return ltrb_off.amin(-1).gt(eps)
+
+    def get_box_metrics(self, pd_scores, pd_bboxes, gt_labels, gt_bboxes, mask_gt):
+        """Compute alignment metric given predicted and ground truth bounding boxes."""
+        na = pd_bboxes.shape[0]
+        mask_gt = mask_gt.bool()  # b, max_num_obj, h*w
+        overlaps = torch.zeros([na, self.n_boxes], dtype=pd_bboxes.dtype, device=pd_bboxes.device)
+        bbox_scores = torch.zeros([na, self.n_boxes], dtype=pd_scores.dtype, device=pd_scores.device)
+
+        bbox_scores[mask_gt] = pd_scores[:, gt_labels][mask_gt]  # b, max_num_obj, h*w
+
+        # (b, max_num_obj, 1, 4), (b, 1, h*w, 4)
+        pd_boxes = pd_bboxes[mask_gt]
+        gt_boxes = gt_bboxes[mask_gt]
+        overlaps[mask_gt] = iou_loss(gt_boxes, pd_boxes, CIoU=True).clamp_(0)
+
+        align_metric = bbox_scores.pow(1.) * overlaps.pow(6.)
+        return align_metric, overlaps
+
+    def select_topk_candidates(self, metrics, largest=True, topk_mask=None):
+        """
+        Select the top-k candidates based on the given metrics.
+
+        Args:
+            metrics (Tensor): A tensor of shape (b, max_num_obj, h*w), where b is the batch size,
+                              max_num_obj is the maximum number of objects, and h*w represents the
+                              total number of anchor points.
+            largest (bool): If True, select the largest values; otherwise, select the smallest values.
+            topk_mask (Tensor): An optional boolean tensor of shape (b, max_num_obj, topk), where
+                                topk is the number of top candidates to consider. If not provided,
+                                the top-k values are automatically computed based on the given metrics.
+
+        Returns:
+            (Tensor): A tensor of shape (b, max_num_obj, h*w) containing the selected top-k candidates.
+        """
+
+        # (b, max_num_obj, topk)
+        topk_metrics, topk_idxs = torch.topk(metrics, 13, dim=0, largest=largest)
+        if topk_mask is None:
+            topk_mask = (topk_metrics.max(-1, keepdim=True)[0] > 1e-9).expand_as(topk_idxs)
+        # (b, max_num_obj, topk)
+        topk_idxs.masked_fill_(~topk_mask, 0)
+
+        # (b, max_num_obj, topk, h*w) -> (b, max_num_obj, h*w)
+        count_tensor = torch.zeros(metrics.shape, dtype=torch.int8, device=topk_idxs.device)
+
+        ones = torch.ones_like(topk_idxs[:1], dtype=torch.int8, device=topk_idxs.device)
+        # 每个网格可以有topk个候选目标
+        for k in range(13):
+            # Expand topk_idxs for each value of k and add 1 at the specified positions
+            count_tensor.scatter_add_(0, topk_idxs[k: k + 1, :], ones)
+        # Filter invalid bboxes
+        # 重叠位置置为背景
+        count_tensor.masked_fill_(count_tensor > 1, 0)
+
+        return count_tensor.to(metrics.dtype)
+
+    @staticmethod
+    def select_highest_overlaps(mask_pos, overlaps, n_max_boxes):
+        """
+        If an anchor box is assigned to multiple gts, the one with the highest IoU will be selected.
+
+        Args:
+            mask_pos (Tensor): shape(b, n_max_boxes, h*w)
+            overlaps (Tensor): shape(b, n_max_boxes, h*w)
+
+        Returns:
+            target_gt_idx (Tensor): shape(b, h*w)
+            fg_mask (Tensor): shape(b, h*w)
+            mask_pos (Tensor): shape(b, n_max_boxes, h*w)
+        """
+        # (b, n_max_boxes, h*w) -> (b, h*w)
+        fg_mask = mask_pos.sum(-1)
+        if fg_mask.max() > 1:  # one anchor is assigned to multiple gt_bboxes
+            mask_multi_gts = (fg_mask.unsqueeze(1) > 1).expand(-1, n_max_boxes)  # (b, n_max_boxes, h*w)
+            max_overlaps_idx = overlaps.argmax(1)  # (b, h*w)
+
+            is_max_overlaps = torch.zeros(mask_pos.shape, dtype=mask_pos.dtype, device=mask_pos.device)
+            is_max_overlaps.scatter_(1, max_overlaps_idx.unsqueeze(1), 1)
+
+            mask_pos = torch.where(mask_multi_gts, is_max_overlaps, mask_pos).float()  # (b, n_max_boxes, h*w)
+            fg_mask = mask_pos.sum(-2)
+        # Find each grid serve which gt(index)
+        target_gt_idx = mask_pos.argmax(-2)  # (b, h*w)
+        return target_gt_idx, fg_mask, mask_pos
+
     def build_targets(self, p, targets, image_size):
         tcls, tbox, indices, anch = [], [], [], []
 
@@ -594,7 +683,7 @@ class YoloLossV8(YoloAnchorFreeLoss):
 
                 tb = targets[targets[:, 0] == si]
 
-                n_boxes = tb.shape[0]
+                self.n_boxes = tb.shape[0]
 
                 nb, cls, x0, y0, x1, y1 = tb.unbind(1)
 
@@ -607,26 +696,36 @@ class YoloLossV8(YoloAnchorFreeLoss):
                                   x1 - x,
                                   y1 - y], dim=-1)
 
-                pd_scores = pred_scores[si, :, cls.long()].sigmoid()
+                mask_in_gts = self.select_candidates_in_gts(tb)
+
+                pd_scores = pred_scores[si].sigmoid()
 
                 pd_bboxes = self.bbox_decode(
                     anchor_centers,
                     pred_distri[si].unsqueeze(0)[..., :self.reg_max * 4]
-                ).unsqueeze(1).expand(-1, n_boxes, -1)
+                ).unsqueeze(1).expand(-1, self.n_boxes, -1)
 
                 gt_bboxes = torch.stack([x0 - identity,
                                          y0 - identity,
                                          x1 - identity,
                                          y1 - identity], dim=-1)
 
-                iou = iou_loss(gt_bboxes, pd_bboxes, CIoU=True).clamp_(0)
+                align_metric, overlaps = self.get_box_metrics(pd_scores, pd_bboxes, cls.long(), gt_bboxes, mask_in_gts)
 
-                align_metric = iou.pow(6.0) * pd_scores.pow(1.0)
+                mask_topk = self.select_topk_candidates(align_metric)
 
+                mask_pos = mask_topk * mask_in_gts
+
+                target_gt_idx, fg_mask, mask_pos = self.select_highest_overlaps(mask_pos, overlaps, self.n_boxes)
+
+                # iou = iou_loss(gt_boxes, pd_boxes, CIoU=True).clamp_(0)
+                #
+                # align_metric = iou.pow(6.0) * bbox_scores.pow(1.0)
+                #
                 # topk_metrics, topk_idxs = torch.topk(align_metric, 13, dim=0, largest=True)
                 #
                 # count_tensor = torch.zeros_like(align_metric)
-
+                #
                 # for k in range(n_boxes):
                 #     count_tensor[:, k][topk_idxs[:, k]] = 1
                 #
