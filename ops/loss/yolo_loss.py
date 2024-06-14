@@ -607,6 +607,9 @@ class YoloLossV8(YoloAnchorFreeLoss):
                                   x1 - x,
                                   y1 - y], dim=-1)
 
+                ltrb_off = tb[..., -4:]
+                j = ltrb_off.amin(-1).gt_(1e-9)
+
                 pd_scores = pred_scores[si, :, cls.long()].sigmoid()
 
                 pd_bboxes = self.bbox_decode(
@@ -623,24 +626,16 @@ class YoloLossV8(YoloAnchorFreeLoss):
 
                 align_metric = iou.pow(6.0) * pd_scores.pow(1.0)
 
-                # topk_metrics, topk_idxs = torch.topk(align_metric, 13, dim=0, largest=True)
-                #
-                # count_tensor = torch.zeros_like(align_metric)
+                topk_metrics, topk_idxs = torch.topk(align_metric, 13, dim=0, largest=True)
 
-                # for k in range(n_boxes):
-                #     count_tensor[:, k][topk_idxs[:, k]] = 1
-                #
-                # count_tensor.masked_fill_(count_tensor > 1, 0)
-                #
-                # align_metric_max_ind = align_metric.argmax(-1, keepdim=True)
-                #
-                # gt_mask = torch.zeros_like(align_metric, dtype=torch.bool).scatter_(-1, align_metric_max_ind, 1)
-                #
-                # tb = tb[gt_mask]
-                #
-                # j = j[gt_mask]
-                #
-                # tb = tb[j]
+                align_metric_max_ind = align_metric.argmax(-1, keepdim=True)
+
+                gt_mask = torch.zeros_like(align_metric, dtype=torch.bool).scatter_(-1, align_metric_max_ind, 1)
+
+                tb = tb[gt_mask]
+
+                tb = tb[topk_idxs.unique()]
+
                 # a = 1
                 # topk_metrics, topk_idxs = torch.topk(align_metric, 13, dim=0)
 
