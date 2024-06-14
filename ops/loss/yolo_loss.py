@@ -608,7 +608,7 @@ class YoloLossV8(YoloAnchorFreeLoss):
                                   y1 - y], dim=-1)
 
                 ltrb_off = tb[..., -4:]
-                j = ltrb_off.amin(-1).gt_(1e-9)
+                j = ltrb_off.amin(-1).gt(1e-9)
 
                 pd_scores = pred_scores[si, :, cls.long()].sigmoid()
 
