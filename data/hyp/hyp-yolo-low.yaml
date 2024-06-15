@@ -24,14 +24,20 @@ mosaic: 1.0
 cls_pw: 1.0
 obj_pw: 1.0
 
-# yolo v5-v9
-anchor_t: 4.0
-box: 0.05  # box loss gain
-cls: 0.5  # cls loss gain
-obj: 1.0  # obj loss gain (scale with pixels)
+# yolo v5-v7
+#anchor_t: 4.0
+#box: 0.05  # box loss gain
+#cls: 0.5  # cls loss gain
+#obj: 1.0  # obj loss gain (scale with pixels)
 
 # yolo v4
 #anchor_t: 0.219
 #box: 0.15  # box loss gain
 #cls: 1.5  # cls loss gain
 #obj: 3.0  # obj loss gain (scale with pixels)
+
+# yolo v8-v9
+anchor_t: 4.0
+box: 0.05  # box loss gain
+cls: 0.5  # cls loss gain
+dfl: 1.0  # obj loss gain (scale with pixels)

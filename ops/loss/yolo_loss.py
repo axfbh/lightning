@@ -5,6 +5,7 @@ from utils.iou import bbox_iou, iou_loss, box_convert
 from ops.loss.basic_loss import BasicLoss
 from ops.metric.DetectionMetric import smooth_BCE
 from utils.anchor_utils import AnchorGenerator, dist2bbox
+from torchvision.ops.focal_loss import sigmoid_focal_loss
 
 torch.set_printoptions(precision=4, sci_mode=False)
 
@@ -561,7 +562,7 @@ class YoloLossV8(YoloAnchorFreeLoss):
         return dist2bbox(pred_dist, anchor_points, xywh=False)[0]
 
     def build_targets(self, p, targets, image_size):
-        tcls, tbox, indices, anch = [], [], [], []
+        tcls, tbox, tcnt, indices, anchs = [], [], [], [], []
 
         bs = p[0].shape[0]
 
@@ -573,9 +574,13 @@ class YoloLossV8(YoloAnchorFreeLoss):
 
         for i in range(self.nl):
 
+            stride = strides[i].flip(0)  # H,W -> W,H
+
             anchor = anchors[i]
 
             anchor_centers = (anchor[:, :2] + anchor[:, 2:]) / 2 + 0.5 * strides[i]  # N
+
+            anchor_sizes = anchor[0, 2] - anchor[0, 0]
 
             pred_distri, pred_scores = p[i].view(bs, self.no, -1).detach().split((self.reg_max * 4, self.nc), 1)
 
@@ -587,77 +592,117 @@ class YoloLossV8(YoloAnchorFreeLoss):
 
             identity = torch.zeros_like(x)
 
+            t = torch.Tensor(size=(0, 8)).to(self.device)
+
             for si in range(bs):
-
-                if si != 2:
-                    continue
-
                 tb = targets[targets[:, 0] == si]
 
-                n_boxes = tb.shape[0]
+                if len(tb):
+                    n_boxes = tb.shape[0]
 
-                nb, cls, x0, y0, x1, y1 = tb.unbind(1)
+                    nb, cls, x0, y0, x1, y1 = tb.unbind(1)
 
-                tb = torch.stack([nb - identity,
-                                  cls - identity,
-                                  x0 - identity,
-                                  y0 - identity,
-                                  x - x0,
-                                  y - y0,
-                                  x1 - x,
-                                  y1 - y], dim=-1)
+                    tb = torch.stack([nb - identity,
+                                      cls - identity,
+                                      x0 - identity,
+                                      y0 - identity,
+                                      x - x0,
+                                      y - y0,
+                                      x1 - x,
+                                      y1 - y], dim=-1)
 
-                ltrb_off = tb[..., -4:]
-                j = ltrb_off.amin(-1).gt(1e-9)
+                    ltrb_off = tb[..., -4:]
+                    j = ltrb_off.amin(-1).gt(1e-9)
 
-                pd_scores = pred_scores[si, :, cls.long()].sigmoid()
+                    pd_scores = pred_scores[si, :, cls.long()].sigmoid()
 
-                pd_bboxes = self.bbox_decode(
-                    anchor_centers,
-                    pred_distri[si].unsqueeze(0)[..., :self.reg_max * 4]
-                ).unsqueeze(1).expand(-1, n_boxes, -1)
+                    pd_bboxes = self.bbox_decode(
+                        anchor_centers,
+                        pred_distri[si].unsqueeze(0)[..., :self.reg_max * 4]
+                    ).unsqueeze(1).expand(-1, n_boxes, -1)
 
-                gt_bboxes = torch.stack([x0 - identity,
-                                         y0 - identity,
-                                         x1 - identity,
-                                         y1 - identity], dim=-1)
+                    gt_bboxes = torch.stack([x0 - identity,
+                                             y0 - identity,
+                                             x1 - identity,
+                                             y1 - identity], dim=-1)
 
-                iou = iou_loss(gt_bboxes, pd_bboxes, CIoU=True).clamp_(0)
+                    iou = iou_loss(gt_bboxes, pd_bboxes, CIoU=True).clamp_(0)
 
-                align_metric = iou.pow(6.0) * pd_scores.pow(1.0)
+                    align_metric = iou.pow(6.0) * pd_scores.pow(1.0)
 
-                topk_metrics, topk_idxs = torch.topk(align_metric, 13, dim=0, largest=True)
+                    align_metric = j * (1e8 - align_metric)
 
-                align_metric_max_ind = align_metric.argmax(-1, keepdim=True)
+                    topk_metrics, topk_idxs = torch.topk(align_metric, 13, dim=0, largest=True)
 
-                gt_mask = torch.zeros_like(align_metric, dtype=torch.bool).scatter_(-1, align_metric_max_ind, 1)
+                    align_metric_max_ind = align_metric.argmax(-1, keepdim=True)
 
-                tb = tb[gt_mask]
+                    gt_mask = torch.zeros_like(align_metric, dtype=torch.bool).scatter_(-1, align_metric_max_ind, 1)
 
-                tb = tb[topk_idxs.unique()]
+                    tb = tb[gt_mask]
 
-                # a = 1
-                # topk_metrics, topk_idxs = torch.topk(align_metric, 13, dim=0)
+                    tb = tb[topk_idxs.unique()]
 
-                # tb = tb[align_metric_mask_ind]
+                    t = torch.cat([t, tb], 0)
 
-        # for i in range(self.nl):
-        #     stride = strides[i].flip(0)  # H,W -> W,H
-        #
-        #     anchor = anchors[i]
-        #
-        #     anchor_centers = (anchor[:, :2] + anchor[:, 2:]) / 2  # N
-        #
-        #     # ----------- grid 大小 -----------
-        #     (bs, _), ng, _ = torch.as_tensor(p[i].shape, device=self.device).split(2)
-        #
-        # return tcls, tbox, indices, anch
+            b, c = t[:, :2].long().t()
+
+            off = t[:, 2:4]
+
+            gxy = t[:, 4:6] + off
+
+            gltrb = t[:, 4:8]
+
+            gi, gj = (gxy / stride).long().t()
+
+            gbox = torch.cat([gxy[:, :2] - gltrb[:, :2], gxy[:, :2] + gltrb[:, 2:]], -1)
+
+            indices.append([b, gj, gi])
+
+            tbox.append(gbox)
+
+            tcls.append(c)
+
+            anchs.append([gxy, anchor_sizes])
+
+        return tcls, tbox, tcnt, anchs, indices
 
     def forward(self, preds, targets, image_size):
         bs = preds[0].shape[0]
 
         lcls = torch.zeros(1, dtype=torch.float32, device=self.device)
         lbox = torch.zeros(1, dtype=torch.float32, device=self.device)
-        lobj = torch.zeros(1, dtype=torch.float32, device=self.device)
+        ldfl = torch.zeros(1, dtype=torch.float32, device=self.device)
 
-        tcls, tbox, indices, anchors = self.build_targets(preds, targets, image_size)
+        tcls, tbox, tcnt, anchs, indices = self.build_targets(preds, targets, image_size)
+
+        for i, pred in enumerate(preds):
+            # 1：dfl
+            # 2：cls
+            pi = pred.permute(0, 2, 3, 1).contiguous()
+            b, gj, gi = indices[i]
+
+            nb = len(b)
+
+            tobj = torch.zeros_like(pi[..., 5:])
+
+            if nb:
+                ps = pi[b, gj, gi]
+                tobj[b, gj, gi, tcls[i]] = 1.0
+
+                pxy, anch_wh = anchs[i]
+
+                pwh = ps[:, :4] * anch_wh
+
+                pbox = torch.cat([pxy - pwh[:, :2], pxy + pwh[:, 2:]], dim=-1)
+
+                giou = iou_loss(pbox, tbox[i], GIoU=True)
+
+                lbox += (1.0 - giou).mean()
+
+            lcls += sigmoid_focal_loss(pi[..., 5:], tobj, reduction='mean')
+
+        lbox *= self.hyp["box"]
+        ldfl *= self.hyp["dfl"]
+        lcls *= self.hyp["cls"]
+
+        return (lbox + ldfl + lcls) * bs, torch.cat((lbox, ldfl, lcls)).detach()

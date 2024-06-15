@@ -77,8 +77,6 @@ class Yolo(LightningModule):
                                 self.opt.image_size[1]) / 640) ** 2 * 3 / nl  # scale to image size and layers
         self.hyp["label_smoothing"] = self.opt.label_smoothing
 
-        self.box_map_metric = MeanAveragePrecision(device=self.device)
-
     def configure_optimizers(self):
         optimizer = smart_optimizer(self,
                                     self.opt.optimizer,
@@ -95,5 +93,7 @@ class Yolo(LightningModule):
         )
 
         self.ema_model = ModelEMA(self)
+
+        self.box_map_metric = MeanAveragePrecision(device=self.device)
 
         return [optimizer], [scheduler]
