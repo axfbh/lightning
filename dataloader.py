@@ -145,5 +145,5 @@ def create_dataloader(path,
                       shuffle=shuffle,
                       num_workers=nw,
                       pin_memory=PIN_MEMORY,
-                      collate_fn=detect_collate_fn_fill,
+                      collate_fn=detect_collate_fn,
                       persistent_workers=persistent_workers)

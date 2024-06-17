@@ -608,6 +608,23 @@ class YoloLossV8(YoloAnchorFreeLoss):
             pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_dist.dtype))
         return dist2bbox(pred_dist, anchor_points, xywh=False)
 
+    def preprocess(self, targets, batch_size, scale_tensor):
+        """Preprocesses the target counts and matches with the input batch size to output a tensor."""
+        if targets.shape[0] == 0:
+            out = torch.zeros(batch_size, 0, 5, device=self.device)
+        else:
+            i = targets[:, 0]  # image index
+            _, counts = i.unique(return_counts=True)
+            counts = counts.to(dtype=torch.int32)
+            out = torch.zeros(batch_size, counts.max(), 5, device=self.device)
+            for j in range(batch_size):
+                matches = i == j
+                n = matches.sum()
+                if n:
+                    out[j, :n] = targets[matches, 1:]
+            out[..., 1:5] = box_convert(out[..., 1:5].mul_(scale_tensor), in_fmt='cxcywh', out_fmt='xyxy')
+        return out
+
     def forward(self, preds, targets, image_size):
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
         feats = preds[1] if isinstance(preds, tuple) else preds
@@ -618,27 +635,29 @@ class YoloLossV8(YoloAnchorFreeLoss):
         pred_scores = pred_scores.permute(0, 2, 1).contiguous()
         pred_distri = pred_distri.permute(0, 2, 1).contiguous()
 
+        # anchors, strides = self.anchors(image_size, preds)
+        # for i in range(len(anchors)):
+        #     anchors[i] /= strides[i].repeat(2)
+        #     anchors[i] = (anchors[i][..., :2] + anchors[i][..., 2:]) / 2 + 0.5
+        #     strides[i] = strides[i].expand(anchors[i].shape[0], -1)
+        # anchor_centers = torch.cat(anchors)
+        # strides = torch.cat(strides)
+
         dtype = pred_scores.dtype
         batch_size = pred_scores.shape[0]
-        anchors, strides = self.anchors(image_size, preds)
-        for i in range(len(anchors)):
-            anchors[i] /= strides[i].repeat(2)
-            anchors[i] = (anchors[i][..., :2] + anchors[i][..., 2:]) / 2 + 0.5
-            strides[i] = strides[i].expand(anchors[i].shape[0], -1)
-        anchor_centers = torch.cat(anchors)
-        strides = torch.cat(strides)
+        imgsz = torch.tensor([1, 1, 1, 1], device=self.device)
+        anchor_points, stride_tensor = make_anchors(feats, [8, 16, 32], 0.5)
 
-        xyxy = box_convert(targets[..., 1:], in_fmt='cxcywh', out_fmt='xyxy')
-        targets = torch.cat([targets[..., :1], xyxy], -1)
+        targets = self.preprocess(targets, batch_size, scale_tensor=imgsz)
         gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy
         mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
 
-        pred_bboxes = self.bbox_decode(anchor_centers, pred_distri)  # xyxy, (b, h*w, 4)
+        pred_bboxes = self.bbox_decode(anchor_points, pred_distri)  # xyxy, (b, h*w, 4)
 
         _, target_bboxes, target_scores, fg_mask, _ = self.assigner(
             pred_scores.detach().sigmoid(),
-            (pred_bboxes.detach() * strides.repeat(1, 2)).type(gt_bboxes.dtype),
-            anchor_centers * strides,
+            (pred_bboxes.detach() * stride_tensor).type(gt_bboxes.dtype),
+            anchor_points * stride_tensor,
             gt_labels,
             gt_bboxes,
             mask_gt,
@@ -649,9 +668,9 @@ class YoloLossV8(YoloAnchorFreeLoss):
         loss[1] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
 
         if fg_mask.sum():
-            target_bboxes /= strides.repeat(1, 2)
+            target_bboxes /= stride_tensor
             loss[0], loss[2] = self.bbox_loss(
-                pred_distri, pred_bboxes, anchor_centers, target_bboxes, target_scores, target_scores_sum, fg_mask
+                pred_distri, pred_bboxes, anchor_points, target_bboxes, target_scores, target_scores_sum, fg_mask
             )
 
         loss[0] *= self.hyp["box"]  # box gain
