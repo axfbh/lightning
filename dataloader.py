@@ -13,7 +13,7 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
 from ops.dataset.voc_dataset import voc_image_anno_paths, voc_bboxes_labels_from_xml
-from ops.dataset.utils import detect_collate_fn, DataCache
+from ops.dataset.utils import detect_collate_fn, DataCache, detect_collate_fn_fill
 from ops.augmentations.geometric.transforms import RandomShiftScaleRotate
 from ops.augmentations.geometric.resize import ResizeShortLongest
 from ops.augmentations.transforms import Mosaic
@@ -145,5 +145,5 @@ def create_dataloader(path,
                       shuffle=shuffle,
                       num_workers=nw,
                       pin_memory=PIN_MEMORY,
-                      collate_fn=detect_collate_fn,
+                      collate_fn=detect_collate_fn_fill,
                       persistent_workers=persistent_workers)

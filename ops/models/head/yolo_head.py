@@ -7,7 +7,7 @@ import torch
 import math
 from utils.utils import make_grid
 from torchvision.ops.misc import Conv2dNormActivation
-from utils.anchor_utils import AnchorGenerator
+from utils.anchor_utils import AnchorGenerator, dist2bbox
 from ops.models.misc.dfl import DFL
 
 
@@ -45,6 +45,8 @@ class YoloV8Head(nn.Module):
         self.anchor = AnchorGenerator([0, 0, 0], [1, 1, 1])
         self.dfl = DFL(self.reg_max) if self.reg_max > 1 else nn.Identity()
 
+        self.anchors = AnchorGenerator([0, 0, 0], [1, 1, 1])
+
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -58,8 +60,14 @@ class YoloV8Head(nn.Module):
             b[-1].bias.data[: m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
 
     def forward(self, x: List, H, W):
-        z = []  # inference output
-        imgsze = torch.tensor([W, H], device=x[0].device)
+        imgsze = torch.tensor([H, W], device=x[0].device)
+
+        anchors, strides = self.anchors(imgsze, x)
+        anchor_centers = []
+        for i in range(len(anchors)):
+            anchor_centers.append((anchors[i][..., :2] + anchors[i][..., 2:]) / 2 + 0.5 * strides[i])
+        anchor_centers = torch.cat(anchor_centers).permute([1, 0]).contiguous()
+
         for i in range(self.nl):
             x[i] = torch.cat((self.reg_head[i](x[i]), self.cls_head[i](x[i])), 1)
         if self.training:  # Training path
@@ -68,9 +76,14 @@ class YoloV8Head(nn.Module):
         shape = x[0].shape  # BCHW
         x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
         box, cls = x_cat.split((self.reg_max * 4, self.nc), 1)
-        dbox = self.dfl(box)
-        y = torch.cat((dbox, cls.sigmoid()), 1)
-        return y, x
+        dbox = self.decode_bboxes(self.dfl(box), anchor_centers.unsqueeze(0))
+        y = torch.cat((dbox, cls.sigmoid()), 1).permute([0, 2, 1])
+
+        return x if self.training else (y, x)
+
+    def decode_bboxes(self, bboxes, anchors):
+        """Decode bounding boxes."""
+        return dist2bbox(bboxes, anchors, xywh=True, dim=1)
 
 
 class YoloV7Head(nn.Module):

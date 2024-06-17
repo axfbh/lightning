@@ -65,7 +65,7 @@ def setup(opt, hyp):
         device=opt.device,
         nproc_per_node=1,
         accumulate=accumulate,
-        bar_train_title=("box_loss", "obj_loss", "cls_loss"),
+        bar_train_title=("box_loss", "dfl_loss", "cls_loss"),
         bar_val_title=("Images", "Instances", "P", "R", "mAP50", "mAP50-95"),
         callbacks=[warmup_callback]
     )
@@ -116,7 +116,7 @@ def main(opt):
 
     trainer.fit(model=model,
                 train_dataloaders=train_loader,
-                val_dataloaders=val_loader,
+                # val_dataloaders=val_loader,
                 ckpt_path=opt.weights if opt.resume else None)
 
 

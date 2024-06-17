@@ -48,7 +48,8 @@ class AnchorGenerator(AG):
         #     anchors_in_image = [anchors_per_feature_map for anchors_per_feature_map in anchors_over_all_feature_maps]
         #     anchors.append(anchors_in_image)
         # anchors = [torch.cat(anchors_per_image) for anchors_per_image in anchors]
-        return anchors_over_all_feature_maps, torch.tensor(strides, dtype=dtype, device=device)
+        strides = [torch.tensor(st, device=device) for st in strides]
+        return anchors_over_all_feature_maps, strides
 
 
 def make_anchors(feats, strides, grid_cell_offset=0.5):

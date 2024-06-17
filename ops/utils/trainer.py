@@ -72,7 +72,7 @@ class Trainer:
             callbacks=callbacks
         )
 
-    def fit(self, model, train_dataloaders, val_dataloaders, ckpt_path=None):
+    def fit(self, model, train_dataloaders, val_dataloaders=None, ckpt_path=None):
         self._trainer.fit(model, train_dataloaders, val_dataloaders, ckpt_path=ckpt_path)
 
     @property

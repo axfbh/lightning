@@ -102,9 +102,7 @@ class YoloV8(Yolo):
         nc = m.nc
         self.hyp["box"] *= 3 / nl  # scale to layers
         self.hyp["cls"] *= nc / 80 * 3 / nl  # scale to classes and layers
-        self.hyp["dfl"] *= (max(self.opt.image_size[0],
-                                self.opt.image_size[1]) / 640) ** 2 * 3 / nl  # scale to image size and layers
-        self.hyp["label_smoothing"] = self.opt.label_smoothing
+        # self.hyp["dfl"] *= 1
 
     def on_fit_start(self) -> None:
         self.compute_loss = YoloLossV8(self)

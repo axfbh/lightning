@@ -23,12 +23,27 @@ def batch_images(images, size_divisible=32):
 
 
 def batch_labels(labels):
+    max_l = np.array([l.shape[0] for l in labels], dtype=int).max(0)
+
+    batched_labels = torch.zeros((len(labels), max_l, labels[0].shape[1] - 1), dtype=labels[0].dtype)
+
     for i, lb in enumerate(labels):
-        lb[:, 0] = i  # add target image index for build_targets()
-    return torch.cat(labels, 0)
+        batched_labels[i, :len(lb)] = lb[:, 1:]  # add target image index for build_targets()
+    return batched_labels
 
 
 def detect_collate_fn(batch):
+    images, labels = zip(*batch)
+
+    batched_imgs = batch_images(images)
+
+    for i, lb in enumerate(labels):
+        lb[:, 0] = i  # add target image index for build_targets()
+
+    return batched_imgs, torch.cat(labels, 0), torch.as_tensor(batched_imgs.shape[-2:])
+
+
+def detect_collate_fn_fill(batch):
     images, labels = zip(*batch)
 
     batched_imgs = batch_images(images)
