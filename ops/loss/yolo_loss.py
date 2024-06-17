@@ -563,12 +563,10 @@ class YoloLossV8(YoloAnchorFreeLoss):
         if self.use_dfl:
             b, a, c = pred_dist.shape  # batch, anchors, channels
             pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_dist.dtype))
-        return dist2bbox(pred_dist, anchor_points, xywh=False)[0]
+        return dist2bbox(pred_dist, anchor_points, xywh=False)
 
     def build_targets(self, p, targets, image_size):
-        tcls, tbox, tcnt, indices, anchs = [], [], [], [], []
-
-        bs = p[0].shape[0]
+        tcls, tbox, tscore, indices, anchs = [], [], [], [], []
 
         xyxy = box_convert(targets[:, 2:], in_fmt='cxcywh', out_fmt='xyxy')
 
@@ -578,13 +576,13 @@ class YoloLossV8(YoloAnchorFreeLoss):
 
         for i in range(self.nl):
 
+            (bs, _), ng = torch.as_tensor(p[i].shape, device=self.device).split(2)
+
             stride = strides[i].flip(0)  # H,W -> W,H
 
             anchor = anchors[i]
 
             anchor_centers = (anchor[:, :2] + anchor[:, 2:]) / 2 + 0.5 * strides[i]  # N
-
-            anchor_sizes = anchor[0, 2] - anchor[0, 0]
 
             pred_distri, pred_scores = p[i].view(bs, self.no, -1).detach().split((self.reg_max * 4, self.nc), 1)
 
@@ -592,11 +590,13 @@ class YoloLossV8(YoloAnchorFreeLoss):
 
             pred_distri = pred_distri.permute(0, 2, 1).contiguous()
 
+            pd_bboxes = self.bbox_decode(anchor_centers, pred_distri)
+
             x, y = anchor_centers.chunk(2, 1)
 
             identity = torch.zeros_like(x)
 
-            t = torch.Tensor(size=(0, 8)).to(self.device)
+            t = torch.Tensor(size=(0, 9)).to(self.device)
 
             for si in range(bs):
                 tb = targets[targets[:, 0] == si]
@@ -616,35 +616,45 @@ class YoloLossV8(YoloAnchorFreeLoss):
                                       y1 - y], dim=-1)
 
                     ltrb_off = tb[..., -4:]
-                    j = ltrb_off.amin(-1).gt(1e-9)
+                    mask_in_gts = ltrb_off.amin(-1).gt(1e-9)
 
-                    pd_scores = pred_scores[si, :, cls.long()].sigmoid()
+                    pd_score = pred_scores[si, :, cls.long()].detach().sigmoid()
 
-                    pd_bboxes = self.bbox_decode(
-                        anchor_centers,
-                        pred_distri[si].unsqueeze(0)[..., :self.reg_max * 4]
-                    ).unsqueeze(1).expand(-1, n_boxes, -1)
+                    pd_bbox = pd_bboxes[si].detach().unsqueeze(1).expand(-1, n_boxes, -1)
 
-                    gt_bboxes = torch.stack([x0 - identity,
-                                             y0 - identity,
-                                             x1 - identity,
-                                             y1 - identity], dim=-1)
+                    gt_bbox = torch.stack([x0 - identity,
+                                           y0 - identity,
+                                           x1 - identity,
+                                           y1 - identity], dim=-1)
 
-                    iou = iou_loss(gt_bboxes, pd_bboxes, CIoU=True).clamp_(0)
+                    iou = iou_loss(gt_bbox, pd_bbox, CIoU=True).clamp_(0)
 
-                    align_metric = iou.pow(6.0) * pd_scores.pow(1.0)
+                    align_metric = iou.pow(6.0) * pd_score.pow(1.0)
 
-                    align_metric = j * (1e8 - align_metric)
+                    align_metric_topk = mask_in_gts * (1e8 - align_metric)
 
-                    topk_metrics, topk_idxs = torch.topk(align_metric, 13, dim=0, largest=True)
+                    topk_metrics, topk_idxs = torch.topk(align_metric_topk, 13, dim=0, largest=True)
 
-                    align_metric_max_ind = align_metric.argmax(-1, keepdim=True)
+                    align_metric_max_ind = align_metric_topk.argmax(-1, keepdim=True)
 
-                    gt_mask = torch.zeros_like(align_metric, dtype=torch.bool).scatter_(-1, align_metric_max_ind, 1)
+                    gt_mask = torch.zeros_like(align_metric_topk, dtype=torch.bool).scatter_(-1, align_metric_max_ind,
+                                                                                             1)
+
+                    pos_align_metrics = align_metric[gt_mask][topk_idxs.unique()]
+
+                    pos_iou = iou[gt_mask][topk_idxs.unique()]
+
+                    pos_align_metrics_max = pos_align_metrics.amax(dim=-1, keepdim=True)
+
+                    pos_iou_max = pos_iou.amax(dim=-1, keepdim=True)
+
+                    norm_align_metric = (pos_align_metrics * pos_iou_max / (pos_align_metrics_max + 1e-9))[..., None]
 
                     tb = tb[gt_mask]
 
                     tb = tb[topk_idxs.unique()]
+
+                    tb = torch.cat([tb, norm_align_metric], -1)
 
                     t = torch.cat([t, tb], 0)
 
@@ -656,6 +666,8 @@ class YoloLossV8(YoloAnchorFreeLoss):
 
             gltrb = t[:, 4:8]
 
+            gscore = t[:, 8:9]
+
             gi, gj = (gxy / stride).long().t()
 
             gbox = torch.cat([gxy[:, :2] - gltrb[:, :2], gxy[:, :2] + gltrb[:, 2:]], -1)
@@ -666,9 +678,11 @@ class YoloLossV8(YoloAnchorFreeLoss):
 
             tcls.append(c)
 
-            anchs.append([gxy, anchor_sizes])
+            tscore.append(gscore)
 
-        return tcls, tbox, tcnt, anchs, indices
+            anchs.append(pd_bboxes.view(bs, *ng, -1))
+
+        return tcls, tbox, tscore, anchs, indices
 
     def forward(self, preds, targets, image_size):
         bs = preds[0].shape[0]
@@ -677,7 +691,7 @@ class YoloLossV8(YoloAnchorFreeLoss):
         lbox = torch.zeros(1, dtype=torch.float32, device=self.device)
         ldfl = torch.zeros(1, dtype=torch.float32, device=self.device)
 
-        tcls, tbox, tcnt, anchs, indices = self.build_targets(preds, targets, image_size)
+        tcls, tbox, tscore, anchs, indices = self.build_targets(preds, targets, image_size)
 
         for i, pred in enumerate(preds):
             # 1：dfl
@@ -690,18 +704,17 @@ class YoloLossV8(YoloAnchorFreeLoss):
             tobj = torch.zeros_like(pi[..., 5:])
 
             if nb:
-                ps = pi[b, gj, gi]
                 tobj[b, gj, gi, tcls[i]] = 1.0
 
-                pxy, anch_wh = anchs[i]
+                ps = anchs[i]
 
-                pwh = ps[:, :4] * anch_wh
+                weight = tscore[i]
 
-                pbox = torch.cat([pxy - pwh[:, :2], pxy + pwh[:, 2:]], dim=-1)
+                pbox = ps[b, gj, gi]
 
                 giou = iou_loss(pbox, tbox[i], GIoU=True)
 
-                lbox += (1.0 - giou).mean()
+                lbox += ((1.0 - giou) * weight).mean()
 
             lcls += sigmoid_focal_loss(pi[..., 5:], tobj, reduction='mean')
 
