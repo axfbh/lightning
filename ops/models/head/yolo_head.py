@@ -75,7 +75,7 @@ class YoloV8Head(nn.Module):
         x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
         box, cls = x_cat.split((self.reg_max * 4, self.nc), 1)
         dbox = self.decode_bboxes(self.dfl(box), anchor_centers.unsqueeze(0))
-        y = torch.cat((dbox, cls.sigmoid()), 1).permute([0, 2, 1])
+        y = torch.cat((dbox, cls.sigmoid()), 1)
 
         return x if self.training else (y, x)
 
