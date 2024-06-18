@@ -23,7 +23,7 @@ class BboxLoss(nn.Module):
     def forward(self, pred_dist, pred_bboxes, anchor_points, target_bboxes, target_scores, target_scores_sum, fg_mask):
         """IoU loss."""
         weight = target_scores.sum(-1)[fg_mask].unsqueeze(-1)
-        iou = iou_loss(pred_bboxes[fg_mask], target_bboxes[fg_mask], CIoU=True)
+        iou = iou_loss(pred_bboxes[fg_mask], target_bboxes[fg_mask], CIoU=True)[:, None]
         loss_iou = ((1.0 - iou) * weight).sum() / target_scores_sum
 
         # DFL loss

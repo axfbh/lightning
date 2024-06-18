@@ -96,13 +96,8 @@ class YoloV8(Yolo):
 
         return self.head([P3, P4, P5], H, W)
 
-    def configure_model(self) -> None:
-        m = self.head  # detection head models
-        nl = m.nl  # number of detection layers (to scale hyp)
-        nc = m.nc
-        self.hyp["box"] *= 3 / nl  # scale to layers
-        self.hyp["cls"] *= nc / 80 * 3 / nl  # scale to classes and layers
-        # self.hyp["dfl"] *= 1
-
     def on_fit_start(self) -> None:
         self.compute_loss = YoloLossV8(self)
+
+    def configure_model(self) -> None:
+        pass
