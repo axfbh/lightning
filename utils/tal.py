@@ -3,7 +3,7 @@
 import torch
 import torch.nn as nn
 
-from utils.iou import bbox_iou, iou_loss, box_convert
+from utils.iou import iou_loss
 
 
 class TaskAlignedAssigner(nn.Module):
@@ -115,7 +115,7 @@ class TaskAlignedAssigner(nn.Module):
         """
         n_anchors = xy_centers.shape[0]
         bs, n_boxes, _ = gt_bboxes.shape
-        # 左上右下
+        # bbox 的 x1y1 x2y2
         # view(-1,1,4) : 所有 bboxes 汇聚在一个维度
         lt, rb = gt_bboxes.view(-1, 1, 4).chunk(2, 2)
         # 计算 anchor 中心点与 gt bboxes 的距离
@@ -184,15 +184,18 @@ class TaskAlignedAssigner(nn.Module):
         # masked_fill_ : 不改变数组的形状，从而将索引置为 0
         topk_idxs.masked_fill_(~mask_topk, 0)
 
+        # count_tensor = torch.zeros(metrics.shape, dtype=torch.int8, device=mask_topk.device)
+        # ones = torch.ones_like(topk_idxs[:, :, :1], dtype=torch.int8, device=topk_idxs.device)
+        #
+        # # 将每个 box 放入网格位置
+        # for k in range(self.topk):
+        #     count_tensor.scatter_add_(-1, topk_idxs[:, :, k].unsqueeze(-1), ones)
+        #
+        # # 只有填充的 bbox 的样本，会在同一个位置多次放入，从而剔除填充 bbox 样本
+        # count_tensor.masked_fill_(count_tensor > 1, 0)
+
         count_tensor = torch.zeros(metrics.shape, dtype=torch.int8, device=mask_topk.device)
-        ones = torch.ones_like(topk_idxs[:, :, :1], dtype=torch.int8, device=topk_idxs.device)
-
-        # 将每个 box 放入网格位置
-        for k in range(self.topk):
-            count_tensor.scatter_add_(-1, topk_idxs[:, :, k].unsqueeze(-1), ones)
-
-        # 只有填充的 bbox 的样本，会在同一个位置多次放入，从而剔除填充 bbox 样本
-        count_tensor.masked_fill_(count_tensor > 1, 0)
+        count_tensor.scatter_(-1, topk_idxs, 1)
 
         return count_tensor.to(metrics.dtype)
 
