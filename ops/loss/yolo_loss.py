@@ -608,7 +608,7 @@ class YoloLossV8(YoloAnchorFreeLoss):
             pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_dist.dtype))
         return dist2bbox(pred_dist, anchor_points, xywh=False)
 
-    def preprocess(self, targets, batch_size, scale_tensor):
+    def preprocess(self, targets, batch_size):
         """Preprocesses the target counts and matches with the input batch size to output a tensor."""
         if targets.shape[0] == 0:
             out = torch.zeros(batch_size, 0, 5, device=self.device)
@@ -622,7 +622,7 @@ class YoloLossV8(YoloAnchorFreeLoss):
                 n = matches.sum()
                 if n:
                     out[j, :n] = targets[matches, 1:]
-            out[..., 1:5] = box_convert(out[..., 1:5].mul_(scale_tensor), in_fmt='cxcywh', out_fmt='xyxy')
+            out[..., 1:5] = box_convert(out[..., 1:5], in_fmt='cxcywh', out_fmt='xyxy')
         return out
 
     def forward(self, preds, targets, image_size):
@@ -645,11 +645,11 @@ class YoloLossV8(YoloAnchorFreeLoss):
 
         dtype = pred_scores.dtype
         batch_size = pred_scores.shape[0]
-        imgsz = torch.tensor([1, 1, 1, 1], device=self.device)
         anchor_points, stride_tensor = make_anchors(feats, [8, 16, 32], 0.5)
 
-        targets = self.preprocess(targets, batch_size, scale_tensor=imgsz)
+        targets = self.preprocess(targets, batch_size)
         gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy
+        # 非填充 bbox 样本索引 mask
         mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
 
         pred_bboxes = self.bbox_decode(anchor_points, pred_distri)  # xyxy, (b, h*w, 4)
