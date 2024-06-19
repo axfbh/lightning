@@ -5,7 +5,7 @@ from ops.models.backbone.utils import _cspdarknet_extractor
 from ops.models.head.yolo_head import YoloV4Head
 from ops.models.neck.spp import SPP
 from ops.models.detection.utils import Yolo
-from ops.loss.yolo_loss2 import YoloLossV4
+from ops.loss.yolo_loss import YoloLossV4
 
 
 class Upsample(nn.Module):
