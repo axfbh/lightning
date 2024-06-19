@@ -116,7 +116,7 @@ def main(opt):
 
     trainer.fit(model=model,
                 train_dataloaders=train_loader,
-                val_dataloaders=val_loader,
+                # val_dataloaders=val_loader,
                 ckpt_path=opt.weights if opt.resume else None)
 
 
