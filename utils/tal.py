@@ -96,7 +96,10 @@ class TaskAlignedAssigner(nn.Module):
         # 计算每个正样本的分数
         align_metric, overlaps = self.get_box_metrics(pd_scores, pd_bboxes, gt_labels, gt_bboxes, mask_in_gts * mask_gt)
         # 找出满足条件二：正样本 mask
-        mask_topk = self.select_topk_candidates(align_metric, mask_gt=mask_gt)
+        mask_topk = self.select_topk_candidates(align_metric)
+        # mask_topk：满足 topk 的样本 mask
+        # mask_in_gts：满足在 gt bbox 内的样本 maks
+        # mask_gt：非填充的样本 maks
         mask_pos = mask_topk * mask_in_gts * mask_gt
 
         return mask_pos, align_metric, overlaps
@@ -121,7 +124,8 @@ class TaskAlignedAssigner(nn.Module):
         # 计算 anchor 中心点与 gt bboxes 的距离
         # view(bs, n_boxes, n_anchors, -1) ：每个 bboxex 有 n_anchors 个候选样本
         bbox_deltas = torch.cat((xy_centers[None] - lt, rb - xy_centers[None]), dim=2).view(bs, n_boxes, n_anchors, -1)
-        # 保留 anchor 中心点落在 gt bboxes 内的位置作为正样本
+        # 每个 anchor 代表一个样本
+        # 保留落在 gt bboxes 内的样本
         return bbox_deltas.amin(3).gt_(eps)  # shape(b, n_boxes, h*w)
 
     def get_box_metrics(self, pd_scores, pd_bboxes, gt_labels, gt_bboxes, mask_gt):
@@ -160,7 +164,7 @@ class TaskAlignedAssigner(nn.Module):
         align_metric = bbox_scores.pow(self.alpha) * overlaps.pow(self.beta)
         return align_metric, overlaps
 
-    def select_topk_candidates(self, metrics, mask_gt, largest=True):
+    def select_topk_candidates(self, metrics, largest=True):
         """
         Select the top-k candidates based on the given metrics.
 
@@ -178,24 +182,24 @@ class TaskAlignedAssigner(nn.Module):
         # 每个 bbox 选取网格内 topk 个正样本
         topk_metrics, topk_idxs = torch.topk(metrics, self.topk, dim=-1, largest=largest)
 
-        mask_topk = mask_gt.expand(-1, -1, self.topk).bool()
+        count_tensor = torch.zeros(metrics.shape, dtype=torch.int8, device=metrics.device)
+        count_tensor.scatter_(-1, topk_idxs, 1)
+
+        # mask_topk = mask_gt.expand(-1, -1, self.topk).bool()
 
         # 填充的 bbox 样本置为 0
         # masked_fill_ : 不改变数组的形状，从而将索引置为 0
-        topk_idxs.masked_fill_(~mask_topk, 0)
+        # topk_idxs.masked_fill_(~mask_topk, 0)
 
         # count_tensor = torch.zeros(metrics.shape, dtype=torch.int8, device=mask_topk.device)
         # ones = torch.ones_like(topk_idxs[:, :, :1], dtype=torch.int8, device=topk_idxs.device)
-        #
+
         # # 将每个 box 放入网格位置
         # for k in range(self.topk):
         #     count_tensor.scatter_add_(-1, topk_idxs[:, :, k].unsqueeze(-1), ones)
-        #
-        # # 只有填充的 bbox 的样本，会在同一个位置多次放入，从而剔除填充 bbox 样本
-        # count_tensor.masked_fill_(count_tensor > 1, 0)
 
-        count_tensor = torch.zeros(metrics.shape, dtype=torch.int8, device=mask_topk.device)
-        count_tensor.scatter_(-1, topk_idxs, 1)
+        # # 只有填充的 bbox 的样本，会在同一个位置多次放入，从而剔除填充 bbox 样本
+        # count_tensor.masked_fill_(65 > 1, 0)
 
         return count_tensor.to(metrics.dtype)
 
@@ -263,15 +267,25 @@ class TaskAlignedAssigner(nn.Module):
             mask_pos (Tensor): shape(b, n_max_boxes, h*w)
         """
         # (b, n_max_boxes, h*w) -> (b, h*w)
+        # 将每个网格的bbox合并一起，统计一个网格的bbox数量
         fg_mask = mask_pos.sum(-2)
-        if fg_mask.max() > 1:  # one anchor is assigned to multiple gt_bboxes
+        # 至少有一个重叠目标
+        if fg_mask.max() > 1:
             mask_multi_gts = (fg_mask.unsqueeze(1) > 1).expand(-1, n_max_boxes, -1)  # (b, n_max_boxes, h*w)
             max_overlaps_idx = overlaps.argmax(1)  # (b, h*w)
 
             is_max_overlaps = torch.zeros(mask_pos.shape, dtype=mask_pos.dtype, device=mask_pos.device)
             is_max_overlaps.scatter_(1, max_overlaps_idx.unsqueeze(1), 1)
 
-            mask_pos = torch.where(mask_multi_gts, is_max_overlaps, mask_pos).float()  # (b, n_max_boxes, h*w)
+            mask_pos2 = torch.where(mask_multi_gts, is_max_overlaps, mask_pos).float()  # (b, n_max_boxes, h*w)
+
+            is_max_overlaps1 = torch.ones(mask_pos.shape, dtype=mask_pos.dtype, device=mask_pos.device)
+            is_max_overlaps1[mask_multi_gts] = 0
+            is_max_overlaps1.scatter_(1, max_overlaps_idx.unsqueeze(1), 1)
+
+            mask_pos3 = is_max_overlaps1 * mask_pos
+
+
             fg_mask = mask_pos.sum(-2)
         # Find each grid serve which gt(index)
         target_gt_idx = mask_pos.argmax(-2)  # (b, h*w)
