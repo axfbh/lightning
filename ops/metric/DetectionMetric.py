@@ -171,8 +171,9 @@ def ap_per_class(tp, conf, pred_cls, target_cls, eps=1e-16):
 
 
 class MeanAveragePrecision:
-    def __init__(self, device, single_cls=False):
+    def __init__(self, device, background=True, single_cls=False):
         # to count the correct predictions
+        self.background = background
         self.stats = []
 
         self.seen = 0
@@ -186,7 +187,7 @@ class MeanAveragePrecision:
     def update(self, preds, targets):
         for si, pred in enumerate(preds):
             labels = targets[targets[:, 0] == si, 1:].clone()
-            labels[:, 0] = labels[:, 0] - 1
+            labels[:, 0] = labels[:, 0] - 0 if self.background else labels[:, 0] - 1
             nl, npr = labels.shape[0], pred.shape[0]  # number of labels, predictions
             correct = torch.zeros(npr, self.niou, dtype=torch.bool, device=self.device)  # init
             self.seen += 1
