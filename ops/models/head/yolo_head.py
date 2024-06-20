@@ -7,8 +7,9 @@ import torch
 import math
 from utils.utils import make_grid
 from torchvision.ops.misc import Conv2dNormActivation
-from utils.anchor_utils import AnchorGenerator, dist2bbox
+from utils.anchor_utils import AnchorGenerator
 from ops.models.misc.dfl import DFL
+from utils.boxes import dist2bbox
 
 
 class YoloV8Head(nn.Module):
