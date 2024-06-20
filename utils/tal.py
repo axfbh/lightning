@@ -307,7 +307,7 @@ class TaskNearestAssigner(nn.Module):
     def get_pos_mask(self, gt_bboxes, grids, strides, mask_gt):
         bbox_deltas = self.cal_bbox_deltas(gt_bboxes, grids, strides)
 
-        align_metric = bbox_deltas.amin(-1)
+        align_metric = bbox_deltas.abs().amin(-1)
 
         mask_topk = self.select_topk_candidates(align_metric, largest=False)
 
@@ -321,8 +321,6 @@ class TaskNearestAssigner(nn.Module):
                                                                                   self.n_max_boxes,
                                                                                   n_anchors,
                                                                                   -1)
-        mask_lt_0 = bbox_deltas.lt(0)
-        bbox_deltas[mask_lt_0] = 999999
         return bbox_deltas
 
     def select_topk_candidates(self, metrics, largest=True):
