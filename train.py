@@ -82,9 +82,9 @@ def main(opt):
     data = OmegaConf.load(Path(opt.data))
     trainer = setup(opt, hyp)
 
-    model = YoloV8(num_classes=cfg.nc, phi='n')
+    # model = YoloV8(num_classes=cfg.nc, phi='n')
     # model = YoloV7(anchors=cfg.anchors, num_classes=cfg.nc, phi='l')
-    # model = YoloV5(anchors=cfg.anchors, num_classes=cfg.nc, phi='n')
+    model = YoloV5(anchors=cfg.anchors, num_classes=cfg.nc, phi='n')
     # model = YoloV4(anchors=cfg.anchors, num_classes=cfg.nc, phi='n')
 
     model.hyp = hyp
@@ -116,7 +116,7 @@ def main(opt):
 
     trainer.fit(model=model,
                 train_dataloaders=train_loader,
-                val_dataloaders=val_loader,
+                # val_dataloaders=val_loader,
                 ckpt_path=opt.weights if opt.resume else None)
 
 

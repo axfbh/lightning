@@ -2,7 +2,7 @@
 
 import torch
 import torch.nn as nn
-
+from utils.utils import make_grid
 from utils.boxes import iou_loss
 
 
@@ -21,7 +21,7 @@ class TaskAlignedAssigner(nn.Module):
         eps (float): A small value to prevent division by zero.
     """
 
-    def __init__(self, topk=13, num_classes=80, alpha=1.0, beta=6.0, eps=1e-9):
+    def __init__(self, topk=13, num_classes=20, alpha=1.0, beta=6.0, eps=1e-9):
         """Initialize a TaskAlignedAssigner object with customizable hyperparameters."""
         super().__init__()
         self.topk = topk
@@ -289,3 +289,69 @@ class TaskAlignedAssigner(nn.Module):
         # Find each grid serve which gt(index)
         target_gt_idx = mask_pos.argmax(-2)  # (b, h*w)
         return target_gt_idx, fg_mask, mask_pos
+
+
+class TaskNearestAssigner(nn.Module):
+    def __init__(self, topk=3, num_classes=20, anchor_t=4):
+        super(TaskNearestAssigner, self).__init__()
+        self.num_classes = num_classes
+        self.topk = topk
+        self.anchor_t = anchor_t
+
+    def make_grids(self, grids, strides):
+        z = []
+        for g, s in zip(grids, strides):
+            z.append(make_grid(g[0], g[1], s[0], s[1], device=self.device))
+        return torch.cat(z, 0)
+
+    def get_pos_mask(self, gt_bboxes, grids, strides, mask_gt):
+        jk_deltas, lm_deltas = self.cal_bbox_deltas(gt_bboxes, grids, strides)
+
+        jk_metric = jk_deltas.amin(-1)
+        lm_metric = lm_deltas.amax(-1)
+
+        mask_topk = self.select_topk_candidates(align_metric, largest=False)
+
+        mask_pos = mask_topk * mask_gt
+
+    def cal_bbox_deltas(self, gt_bboxes, grids, strides):
+        grid = self.make_grids(grids, strides)
+        n_anchors = grid.shape[0]
+        txy, wh = gt_bboxes.view(-1, 1, 4).chunk(2, 2)
+        jk_deltas = (grid[None] - txy).view(self.bs, self.n_max_boxes, n_anchors, -1)
+        lm_deltas = (txy - grid[None]).view(self.bs, self.n_max_boxes, n_anchors, -1)
+        mask_lt_0 = jk_deltas.lt(0)
+        jk_deltas[mask_lt_0] = 9999999
+        mask_gt_0 = lm_deltas.gt(0)
+        lm_deltas[mask_gt_0] = -9999999
+        return jk_deltas, lm_deltas
+
+    def select_topk_candidates(self, metrics, largest=True):
+        """
+        Select the top-k candidates based on the given metrics.
+
+        Args:
+            metrics (Tensor): A tensor of shape (b, max_num_obj, h*w), where b is the batch size,
+                              max_num_obj is the maximum number of objects, and h*w represents the
+                              total number of anchor points.
+            largest (bool): If True, select the largest values; otherwise, select the smallest values.
+            mask_gt (Tensor): 非填充的 bbox 样本索引 mask.
+
+        Returns:
+            (Tensor): A tensor of shape (b, max_num_obj, h*w) containing the selected top-k mask.
+        """
+
+        # 每个 bbox 选取网格内 topk 个正样本
+        topk_metrics, topk_idxs = torch.topk(metrics, self.topk, dim=2, largest=largest)
+
+        count_tensor = torch.zeros(metrics.shape, dtype=torch.int8, device=metrics.device)
+        count_tensor.scatter_(-1, topk_idxs, 1)
+
+        return count_tensor.to(metrics.dtype)
+
+    def forward(self, anc_points, gt_bboxes, grids, strides, mask_gt):
+        self.bs = gt_bboxes.shape[0]
+        self.n_max_boxes = gt_bboxes.shape[1]
+        self.device = mask_gt.device
+
+        self.get_pos_mask(gt_bboxes, grids, strides, mask_gt)

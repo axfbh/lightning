@@ -1,13 +1,11 @@
 import torch
 import torch.nn as nn
 from abc import abstractmethod
-from utils.boxes import bbox_iou, iou_loss, box_convert
+from utils.boxes import bbox_iou, iou_loss, box_convert, dist2bbox, bbox2dist
 from ops.loss.basic_loss import BasicLoss
 from ops.metric.DetectionMetric import smooth_BCE
-from utils.anchor_utils import dist2bbox, bbox2dist, make_anchors
 from utils.tal import TaskAlignedAssigner
 import torch.nn.functional as F
-from torchvision.models.detection.anchor_utils import AnchorGenerator
 
 torch.set_printoptions(precision=4, sci_mode=False)
 
@@ -42,7 +40,7 @@ class YoloAnchorFreeLoss(BasicLoss):
 
         m = model.head
 
-        self.anchors = m.anchors
+        self.anchors = m.make_anchors
         self.nl = m.nl
         self.nc = m.nc
         self.no = m.no
@@ -562,29 +560,69 @@ class YoloLossV8(YoloAnchorFreeLoss):
             pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_dist.dtype))
         return dist2bbox(pred_dist, anchor_points, xywh=False)
 
-    @staticmethod
-    def anchor_process(anchor, stride):
-        anchor_centers = (anchor[:, :2] + anchor[:, 2:]) / 2
-        anchor_centers = anchor_centers / stride + 0.5
-        return anchor_centers
-
-    def build_targets(self, p, targets, image_size):
-
-        targets[:, 2:] = box_convert(targets[:, 2:], 'cxcywh', 'xyxy')
-
-        anchors, strides = self.anchors(image_size, p)
-
-        for i in range(self.nl):
-            # ----------- grid 大小 -----------
-            (bs, _), ng = torch.as_tensor(p[i].shape, device=self.device).split(2)
-
-            anchor_point = self.anchor_process(anchors[i], strides[i])
-
-            print(1)
+    def targets_preprocess(self, targets, batch_size):
+        """Preprocesses the target counts and matches with the input batch size to output a tensor."""
+        if targets.shape[0] == 0:
+            out = torch.zeros(batch_size, 0, 5, device=self.device)
+        else:
+            i = targets[:, 0]  # image index
+            _, counts = i.unique(return_counts=True)
+            counts = counts.to(dtype=torch.int32)
+            out = torch.zeros(batch_size, counts.max(), 5, device=self.device)
+            for j in range(batch_size):
+                matches = i == j
+                n = matches.sum()
+                if n:
+                    out[j, :n] = targets[matches, 1:]
+            out[..., 1:5] = box_convert(out[..., 1:5], in_fmt='cxcywh', out_fmt='xyxy')
+        return out
 
     def forward(self, preds, targets, image_size):
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
-        self.build_targets(preds, targets, image_size)
+        feats = preds[1] if isinstance(preds, tuple) else preds
+        pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
+            (self.reg_max * 4, self.nc), 1
+        )
+
+        pred_scores = pred_scores.permute(0, 2, 1).contiguous()
+        pred_distri = pred_distri.permute(0, 2, 1).contiguous()
+
+        dtype = pred_scores.dtype
+        batch_size = pred_scores.shape[0]
+        # make grid
+        anchor_points, stride_tensor = self.anchors(image_size, preds)
+
+        targets = self.targets_preprocess(targets, batch_size)
+        gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy
+        # 非填充 bbox 样本索引 mask
+        mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
+
+        pred_bboxes = self.bbox_decode(anchor_points, pred_distri)  # xyxy, (b, h*w, 4)
+
+        _, target_bboxes, target_scores, fg_mask, _ = self.assigner(
+            pred_scores.detach().sigmoid(),
+            (pred_bboxes.detach() * stride_tensor.repeat(1, 2)).type(gt_bboxes.dtype),
+            anchor_points * stride_tensor,
+            gt_labels,
+            gt_bboxes,
+            mask_gt,
+        )
+
+        target_scores_sum = max(target_scores.sum(), 1)
+
+        loss[1] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
+
+        if fg_mask.sum():
+            target_bboxes /= stride_tensor.repeat(1, 2)
+            loss[0], loss[2] = self.bbox_loss(
+                pred_distri, pred_bboxes, anchor_points, target_bboxes, target_scores, target_scores_sum, fg_mask
+            )
+
+        loss[0] *= self.hyp["box"]  # box gain
+        loss[1] *= self.hyp["cls"]  # cls gain
+        loss[2] *= self.hyp["dfl"]  # dfl gain
+
+        return loss.sum() * batch_size, loss.detach()  # loss(box, cls, dfl)
 
 
 class BboxLoss(nn.Module):

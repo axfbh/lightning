@@ -4,8 +4,9 @@ from abc import abstractmethod
 from utils.boxes import bbox_iou, iou_loss, box_convert, dist2bbox, bbox2dist
 from ops.loss.basic_loss import BasicLoss
 from ops.metric.DetectionMetric import smooth_BCE
-from utils.tal import TaskAlignedAssigner
+from utils.tal import TaskAlignedAssigner, TaskNearestAssigner
 import torch.nn.functional as F
+from utils.utils import make_grid
 
 torch.set_printoptions(precision=4, sci_mode=False)
 
@@ -22,6 +23,8 @@ class YoloAnchorBasedLoss(BasicLoss):
         self.nl = m.nl
         self.na = m.na
         self.nc = m.nc
+        self.no = m.no
+        self.assigner = TaskNearestAssigner(anchor_t=self.hyp['anchor_t'], topk=3, num_classes=self.nc)
 
         self.balance = [4.0, 1.0, 0.4]
 
@@ -368,52 +371,54 @@ class YoloLossV5(YoloAnchorBasedLoss):
 
         return tcls, tbox, indices, anch
 
+    def targets_preprocess(self, targets, batch_size):
+        """Preprocesses the target counts and matches with the input batch size to output a tensor."""
+        if targets.shape[0] == 0:
+            out = torch.zeros(batch_size, 0, 5, device=self.device)
+        else:
+            i = targets[:, 0]  # image index
+            _, counts = i.unique(return_counts=True)
+            counts = counts.to(dtype=torch.int32)
+            out = torch.zeros(batch_size, counts.max(), 5, device=self.device)
+            for j in range(batch_size):
+                matches = i == j
+                n = matches.sum()
+                if n:
+                    out[j, :n] = targets[matches, 1:]
+            out[..., 1:5] = out[..., 1:5]
+        return out
+
     def forward(self, preds, targets, image_size):
-        bs = preds[0].shape[0]
+        loss = torch.zeros(3, dtype=torch.float32, device=self.device)
+        feats = preds[1] if isinstance(preds, tuple) else preds
+        pred_bboxes, pred_scores = torch.cat(
+            [
+                xi.view(feats[0].shape[0], self.na * self.no, -1) for xi in feats
+            ], 2).split((4 * self.na, (1 + self.nc) * self.na), 1)
 
-        lcls = torch.zeros(1, dtype=torch.float32, device=self.device)
-        lbox = torch.zeros(1, dtype=torch.float32, device=self.device)
-        lobj = torch.zeros(1, dtype=torch.float32, device=self.device)
+        batch_size = pred_scores.shape[0]
 
-        tcls, tbox, indices, anchors = self.build_targets(preds, targets, image_size)
+        grids = torch.stack([
+            torch.tensor(p.shape[-2:], device=self.device)
+            for p in preds
+        ], 0)
 
-        for i, pi in enumerate(preds):
+        strides = torch.stack([
+            image_size / s
+            for s in grids
+        ], 0)
 
-            b, a, gj, gi = indices[i]
+        targets = self.targets_preprocess(targets, batch_size)
+        gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy
+        mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
 
-            tobj = torch.zeros_like(pi[..., 0])
-
-            nb = len(b)
-
-            if nb:
-                ps = pi[b, a, gj, gi]
-
-                pxy = torch.sigmoid(ps[:, 0:2]) * 2 - 0.5
-
-                pwh = (torch.sigmoid(ps[:, 2:4]) * 2) ** 2 * anchors[i]
-
-                pbox = torch.cat([pxy, pwh], 1)
-
-                iou = iou_loss(pbox, tbox[i], in_fmt='cxcywh', CIoU=True)
-
-                lbox += (1 - iou).mean()
-
-                iou = iou.detach().clamp(0).type(tobj.dtype)
-                tobj[b, a, gj, gi] = iou  # iou ratio
-
-                if self.nc > 1:
-                    t = torch.full_like(ps[:, 5:], self.cn)  # targets
-                    t[range(nb), tcls[i] - 1] = self.cp
-                    lcls += self.BCEcls(ps[:, 5:], t)
-
-            obji = self.BCEobj(pi[..., 4], tobj)
-            lobj += obji * self.balance[i]  # obj loss
-
-        lbox *= self.hyp["box"]
-        lobj *= self.hyp["obj"]
-        lcls *= self.hyp["cls"]
-
-        return (lbox + lobj + lcls) * bs, torch.cat((lbox, lobj, lcls)).detach()
+        _, target_bboxes, target_scores, fg_mask, _ = self.assigner(
+            self.anchors,
+            gt_bboxes,
+            grids,
+            strides,
+            mask_gt,
+        )
 
 
 class YoloLossV7(YoloAnchorBasedLoss):
