@@ -40,7 +40,7 @@ class YoloAnchorFreeLoss(BasicLoss):
 
         m = model.head
 
-        self.anchors = m.anchors
+        self.anchors = m.make_anchors
         self.nl = m.nl
         self.nc = m.nc
         self.no = m.no
@@ -560,16 +560,6 @@ class YoloLossV8(YoloAnchorFreeLoss):
             pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_dist.dtype))
         return dist2bbox(pred_dist, anchor_points, xywh=False)
 
-    def anchors_preprocess(self, image_size, preds, offset=0.5):
-        anchors, strides = self.anchors(image_size, preds)
-        for i in range(len(anchors)):
-            anchors[i] = (anchors[i][..., :2] + anchors[i][..., 2:]) / 2
-            anchors[i] = anchors[i] / strides[i] + offset
-            strides[i] = strides[i].expand(anchors[i].shape[0], -1)
-        anchor_points = torch.cat(anchors)
-        strides = torch.cat(strides)
-        return anchor_points, strides
-
     def targets_preprocess(self, targets, batch_size):
         """Preprocesses the target counts and matches with the input batch size to output a tensor."""
         if targets.shape[0] == 0:
@@ -599,7 +589,7 @@ class YoloLossV8(YoloAnchorFreeLoss):
 
         dtype = pred_scores.dtype
         batch_size = pred_scores.shape[0]
-        anchor_points, stride_tensor = self.anchors_preprocess(image_size, preds)
+        anchor_points, stride_tensor = self.anchors(image_size, preds)
 
         targets = self.targets_preprocess(targets, batch_size)
         gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy

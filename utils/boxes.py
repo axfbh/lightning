@@ -19,10 +19,11 @@ def dist2bbox(distance, anchor_points, xywh=True, dim=-1):
     lt, rb = distance.chunk(2, dim)
     x1y1 = anchor_points - lt
     x2y2 = anchor_points + rb
-    boxes = torch.cat((x1y1, x2y2), dim)
     if xywh:
-        boxes = box_convert(boxes, in_fmt='xyxy', out_fmt='cxcywh')
-    return boxes
+        c_xy = (x1y1 + x2y2) / 2
+        wh = x2y2 - x1y1
+        return torch.cat((c_xy, wh), dim)  # xywh bbox
+    return torch.cat((x1y1, x2y2), dim)  # xyxy bbox
 
 
 def bbox2dist(anchor_points, bbox, reg_max):

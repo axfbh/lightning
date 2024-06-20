@@ -58,14 +58,20 @@ class YoloV8Head(nn.Module):
             a[-1].bias.data[:] = 1.0  # box
             b[-1].bias.data[: m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
 
+    def make_anchors(self, image_size, preds, offset=0.5):
+        anchors, strides = self.anchors(image_size, preds)
+        for i in range(len(anchors)):
+            anchors[i] = (anchors[i][..., :2] + anchors[i][..., 2:]) / 2
+            anchors[i] = anchors[i] / strides[i] + offset
+            strides[i] = strides[i].expand(anchors[i].shape[0], -1)
+        anchor_points = torch.cat(anchors)
+        strides = torch.cat(strides)
+        return anchor_points, strides
+
     def forward(self, x: List, H, W):
         imgsze = torch.tensor([H, W], device=x[0].device)
 
-        anchors, strides = self.anchors(imgsze, x)
-        anchor_centers = []
-        for i in range(len(anchors)):
-            anchor_centers.append((anchors[i][..., :2] + anchors[i][..., 2:]) / 2 + 0.5 * strides[i])
-        anchor_centers = torch.cat(anchor_centers).permute([1, 0]).contiguous()
+        anchor_points, stride_tensor = (x.transpose(0, 1) for x in self.make_anchors(imgsze, x))
 
         for i in range(self.nl):
             x[i] = torch.cat((self.reg_head[i](x[i]), self.cls_head[i](x[i])), 1)
@@ -75,7 +81,7 @@ class YoloV8Head(nn.Module):
         shape = x[0].shape  # BCHW
         x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
         box, cls = x_cat.split((self.reg_max * 4, self.nc), 1)
-        dbox = self.decode_bboxes(self.dfl(box), anchor_centers.unsqueeze(0))
+        dbox = self.decode_bboxes(self.dfl(box), anchor_points.unsqueeze(0)) * stride_tensor.repeat(2, 1)
         y = torch.cat((dbox, cls.sigmoid()), 1)
 
         return x if self.training else (y, x)
