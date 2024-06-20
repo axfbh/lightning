@@ -58,16 +58,6 @@ class YoloV8Head(nn.Module):
             a[-1].bias.data[:] = 1.0  # box
             b[-1].bias.data[: m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
 
-    def make_anchors(self, image_size, preds, offset=0.5):
-        anchors, strides = self.anchors(image_size, preds)
-        for i in range(len(anchors)):
-            anchors[i] = (anchors[i][..., :2] + anchors[i][..., 2:]) / 2
-            anchors[i] = anchors[i] / strides[i] + offset
-            strides[i] = strides[i].expand(anchors[i].shape[0], -1)
-        anchor_points = torch.cat(anchors)
-        strides = torch.cat(strides)
-        return anchor_points, strides
-
     def forward(self, x: List, H, W):
         imgsze = torch.tensor([H, W], device=x[0].device)
 
@@ -85,6 +75,16 @@ class YoloV8Head(nn.Module):
         y = torch.cat((dbox, cls.sigmoid()), 1)
 
         return x if self.training else (y, x)
+
+    def make_anchors(self, image_size, preds, offset=0.5):
+        anchors, strides = self.anchors(image_size, preds)
+        for i in range(len(anchors)):
+            anchors[i] = (anchors[i][..., :2] + anchors[i][..., 2:]) / 2
+            anchors[i] = anchors[i] / strides[i] + offset
+            strides[i] = strides[i].expand(anchors[i].shape[0], -1)
+        anchor_points = torch.cat(anchors)
+        strides = torch.cat(strides)
+        return anchor_points, strides
 
     def decode_bboxes(self, bboxes, anchors):
         """Decode bounding boxes."""

@@ -589,6 +589,7 @@ class YoloLossV8(YoloAnchorFreeLoss):
 
         dtype = pred_scores.dtype
         batch_size = pred_scores.shape[0]
+        # make grid
         anchor_points, stride_tensor = self.anchors(image_size, preds)
 
         targets = self.targets_preprocess(targets, batch_size)
