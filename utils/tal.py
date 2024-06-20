@@ -305,10 +305,9 @@ class TaskNearestAssigner(nn.Module):
         return torch.cat(z, 0)
 
     def get_pos_mask(self, gt_bboxes, grids, strides, mask_gt):
-        jk_deltas, lm_deltas = self.cal_bbox_deltas(gt_bboxes, grids, strides)
+        bbox_deltas = self.cal_bbox_deltas(gt_bboxes, grids, strides)
 
-        jk_metric = jk_deltas.amin(-1)
-        lm_metric = lm_deltas.amax(-1)
+        align_metric = bbox_deltas.amin(-1)
 
         mask_topk = self.select_topk_candidates(align_metric, largest=False)
 
@@ -318,13 +317,13 @@ class TaskNearestAssigner(nn.Module):
         grid = self.make_grids(grids, strides)
         n_anchors = grid.shape[0]
         txy, wh = gt_bboxes.view(-1, 1, 4).chunk(2, 2)
-        jk_deltas = (grid[None] - txy).view(self.bs, self.n_max_boxes, n_anchors, -1)
-        lm_deltas = (txy - grid[None]).view(self.bs, self.n_max_boxes, n_anchors, -1)
-        mask_lt_0 = jk_deltas.lt(0)
-        jk_deltas[mask_lt_0] = 9999999
-        mask_gt_0 = lm_deltas.gt(0)
-        lm_deltas[mask_gt_0] = -9999999
-        return jk_deltas, lm_deltas
+        bbox_deltas = torch.cat((grid[None] - txy, txy - grid[None]), dim=2).view(self.bs,
+                                                                                  self.n_max_boxes,
+                                                                                  n_anchors,
+                                                                                  -1)
+        mask_lt_0 = bbox_deltas.lt(0)
+        bbox_deltas[mask_lt_0] = 999999
+        return bbox_deltas
 
     def select_topk_candidates(self, metrics, largest=True):
         """
