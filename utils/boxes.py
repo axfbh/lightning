@@ -12,12 +12,26 @@ def _wh_to_coor(box: torch.Tensor):
     return new_box
 
 
-def cxcwh2xy(box):
-    c = box[:, :2]
-    wh = box[:, 2:]
-    xmin, ymin = (c - wh / 2).t()
-    xmax, ymax = (c + wh / 2).t()
-    return torch.vstack([xmin, ymin, xmax, ymax]).t()
+def dist2bbox(distance, anchor_points, xywh=True, dim=-1):
+    """
+        Transform distance(ltrb) to box(xywh or xyxy).
+    """
+    lt, rb = distance.chunk(2, dim)
+    x1y1 = anchor_points - lt
+    x2y2 = anchor_points + rb
+    if xywh:
+        c_xy = (x1y1 + x2y2) / 2
+        wh = x2y2 - x1y1
+        return torch.cat((c_xy, wh), dim)  # xywh bbox
+    return torch.cat((x1y1, x2y2), dim)  # xyxy bbox
+
+
+def bbox2dist(anchor_points, bbox, reg_max):
+    """
+        Transform bbox(xyxy) to dist(ltrb).
+    """
+    x1y1, x2y2 = bbox.chunk(2, -1)
+    return torch.cat((anchor_points - x1y1, x2y2 - anchor_points), -1).clamp_(0, reg_max - 0.01)  # dist (lt, rb)
 
 
 def bbox_iou(boxes1: torch.Tensor,
@@ -75,7 +89,6 @@ def iou_loss(
         GIoU=False,
         DIoU=False,
         CIoU=False) -> torch.Tensor:
-
     boxes1 = box_convert(boxes1, in_fmt, out_fmt)
     boxes2 = box_convert(boxes2, in_fmt, out_fmt)
 

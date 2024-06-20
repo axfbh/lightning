@@ -3,7 +3,7 @@
 import torch
 import torch.nn as nn
 
-from utils.iou import iou_loss
+from utils.boxes import iou_loss
 
 
 class TaskAlignedAssigner(nn.Module):

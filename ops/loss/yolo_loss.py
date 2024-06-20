@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
 from abc import abstractmethod
-from utils.iou import bbox_iou, iou_loss, box_convert
+from utils.boxes import bbox_iou, iou_loss, box_convert, dist2bbox, bbox2dist
 from ops.loss.basic_loss import BasicLoss
 from ops.metric.DetectionMetric import smooth_BCE
-from utils.anchor_utils import dist2bbox, bbox2dist, make_anchors
 from utils.tal import TaskAlignedAssigner
 import torch.nn.functional as F
 

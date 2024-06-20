@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from utils.iou import iou_loss
+from utils.boxes import iou_loss
 from torchvision.ops.focal_loss import sigmoid_focal_loss
 from utils.anchor_utils import AnchorGenerator
 from ops.loss.basic_loss import BasicLoss
