@@ -276,100 +276,6 @@ class YoloLossV4(YoloAnchorBasedLoss):
 
 
 class YoloLossV5(YoloAnchorBasedLoss):
-    def build_targets(self, p, targets, image_size):
-        tcls, tbox, indices, anch = [], [], [], []
-
-        gain = torch.ones(6, device=targets.device)  # normalized to gridspace gain
-
-        for i in range(self.nl):
-            # ----------- grid 大小 -----------
-            (bs, _), ng, _ = torch.as_tensor(p[i].shape, device=self.device).split(2)
-
-            # ----------- 网格 ——----------
-            x, y = torch.tensor([[0, 0],
-                                 [1, 0],
-                                 [0, 1],
-                                 [-1, 0],
-                                 [0, -1]], device=self.device, dtype=torch.float32).mul(0.5).chunk(2, 1)
-
-            identity = torch.zeros_like(x)
-
-            # ----------- 图片与 grid 的比值 -----------
-            stride = image_size / ng
-
-            # ----------- 锚框映射到 grid 大小 -----------
-            anchor = self.anchors[i] / stride[[1, 0]]
-
-            na = len(anchor)
-
-            # ----------- 归一化的 坐标和长宽 -----------
-            gain[2:] = (1 / stride)[[1, 0, 1, 0]]
-
-            t = torch.Tensor(size=(0, 9)).to(self.device)
-
-            for si in range(bs):
-                tb = targets[targets[:, 0] == si] * gain
-
-                if len(tb):
-                    nb, cls, cx, cy, gw, gh = tb.unbind(1)
-
-                    # ----------- 选择目标点 1 格距离内的网格用于辅助预测 -----------
-                    tb = torch.stack([nb - identity,
-                                      cls - identity,
-                                      cx - identity,
-                                      cy - identity,
-                                      cx - x,
-                                      cy - y,
-                                      gw - identity,
-                                      gh - identity],
-                                     -1)
-
-                    # j：左格左上角
-                    j = tb[0, :, 4] % 1 < 0.5
-                    # k：上格左上角
-                    k = tb[0, :, 5] % 1 < 0.5
-                    # l：右格左上角
-                    l = ~j
-                    # m：下格左上角
-                    m = ~k
-                    j = torch.stack([torch.ones_like(j), j, k, l, m])
-                    tb = tb[j]
-                    j = torch.bitwise_and(0 <= tb[..., 4:6], tb[..., 4:6] < ng[[1, 0]]).all(-1)
-                    tb = tb[j]
-
-                    ai = torch.arange(na, device=self.device).view(na, 1).repeat(1, len(tb))
-
-                    tb = torch.cat((tb.repeat(na, 1, 1), ai[:, :, None]), 2)
-
-                    #  ------------ 选择最大的长宽比，删除小于阈值的框 -------------
-                    r = tb[..., 6:8] / anchor[:, None]
-                    j = torch.max(r, 1 / r).max(2)[0] < self.hyp['anchor_t']
-                    tb = tb[j]
-
-                    t = torch.cat([t, tb], 0)
-
-            # ----------- 分别提取信息，生成 -----------
-            b, c = t[:, :2].long().t()
-
-            gxy = t[:, 2:4]
-
-            gwh = t[:, 6:8]
-
-            gij = t[:, 4:6].long()
-
-            gi, gj = gij.t()
-
-            a = t[:, 8].long()
-
-            indices.append([b, a, gj, gi])
-
-            tbox.append(torch.cat([gxy - gij, gwh], 1))
-
-            anch.append(anchor[a])
-
-            tcls.append(c)
-
-        return tcls, tbox, indices, anch
 
     def targets_preprocess(self, targets, batch_size):
         """Preprocesses the target counts and matches with the input batch size to output a tensor."""
@@ -391,15 +297,15 @@ class YoloLossV5(YoloAnchorBasedLoss):
     def forward(self, preds, targets, image_size):
         loss = torch.zeros(3, dtype=torch.float32, device=self.device)
         feats = preds[1] if isinstance(preds, tuple) else preds
-        pred_bboxes, pred_conf, pred_scores = torch.cat(
+        pred_bboxes, pred_confs, pred_scores = torch.cat(
             [
-                xi.view(feats[0].shape[0], self.no, -1) for xi in feats
-            ], 2).split((4, 1, self.nc), 1)
+                xi.view(feats[0].shape[0], self.na, -1, self.no) for xi in feats
+            ], 2).split((4, 1, self.nc), -1)
 
-        batch_size = pred_scores.shape[0]
+        batch_size = pred_scores.shape[1]
 
         grid_size = torch.stack([
-            torch.tensor(p.shape[-2:], device=self.device)
+            torch.tensor(p.shape[-3:-1], device=self.device)
             for p in preds
         ], 0)
 
@@ -409,10 +315,15 @@ class YoloLossV5(YoloAnchorBasedLoss):
         ], 0)
 
         targets = self.targets_preprocess(targets, batch_size)
+        n_max_box = targets.shape[1]
+        pred_bboxes = pred_bboxes.permute(1, 0, 2, 3).contiguous().unsqueeze(2).expand(-1, -1, n_max_box, -1, -1)
+        pred_confs = pred_confs.permute(1, 0, 2, 3).contiguous().unsqueeze(2).expand(-1, -1, n_max_box, -1, -1)
+        pred_scores = pred_scores.permute(1, 0, 2, 3).contiguous().unsqueeze(2).expand(-1, -1, n_max_box, -1, -1)
         gt_labels, gt_cxy, gt_wh = targets.split((1, 2, 2), 2)  # cls, xyxy
         mask_gt = gt_cxy.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
 
-        target_labels, gt_conf, target_bboxes, mask_pos, anch, mask_anch = self.assigner(
+        anch, target_labels, target_confs, target_bboxes, mask_pos, = self.assigner(
+            batch_size,
             self.anchors,
             gt_labels,
             gt_cxy,
@@ -422,7 +333,20 @@ class YoloLossV5(YoloAnchorBasedLoss):
             mask_gt,
         )
 
-        a = 1
+        giou = iou_loss(pred_bboxes[mask_pos], target_bboxes[mask_pos], in_fmt='cxcywh', GIoU=True)
+
+        loss[0] = (1.0 - giou).mean()
+
+        if self.nc > 1:
+            loss[1] = self.BCEcls(pred_scores[mask_pos], target_labels[mask_pos])
+
+        loss[2] = self.BCEobj(pred_confs[mask_pos], target_confs[mask_pos])
+
+        loss[0] *= self.hyp["box"]
+        loss[1] *= self.hyp["cls"]
+        loss[2] *= self.hyp["obj"]
+
+        return loss.sum() * batch_size, loss.detach()  # loss(box, cls, dfl)
 
 
 class YoloLossV7(YoloAnchorBasedLoss):

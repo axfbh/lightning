@@ -317,54 +317,51 @@ class TaskNearestAssigner(nn.Module):
         return torch.cat(z, 1)
 
     def get_targets(self, gt_labels, gt_cxy, gt_wh, mask_pos):
-        na = mask_pos.shape[2]
+        ng = mask_pos.shape[2]
 
-        gt_cxy = gt_cxy.unsqueeze(2).expand(-1, -1, na, -1)
-        gt_wh = gt_wh.unsqueeze(2).expand(-1, -1, na, -1)
-        gt_labels = gt_labels.unsqueeze(2).expand(-1, -1, na, -1)
+        gt_cxy = gt_cxy.unsqueeze(2).expand(-1, -1, self.ng, -1)
+        gt_wh = gt_wh.unsqueeze(2).expand(-1, -1, self.ng, -1)
+        gt_labels = gt_labels.unsqueeze(2).expand(-1, -1, self.ng, -1)
 
         txy = self.grid - gt_cxy
 
         gt_txy = (txy / self.strides)
         gt_wh = (gt_wh / self.strides)
 
-        gt_labels01 = torch.zeros((self.bs, self.n_max_boxes, na, self.num_classes),
+        gt_labels01 = torch.zeros((self.bs, self.n_max_boxes, self.ng, self.num_classes),
                                   dtype=torch.float,
                                   device=self.device)
         gt_labels01.scatter_(-1, gt_labels.long(), 1)
 
-        gt_conf = torch.zeros((self.bs, self.n_max_boxes, na),
+        gt_conf = torch.zeros((self.bs, self.n_max_boxes, self.ng),
                               dtype=torch.float,
                               device=self.device)
         gt_conf[mask_pos] = 1
 
         return gt_labels01, gt_conf, torch.cat([gt_txy, gt_wh], -1), mask_pos
 
-    def select_layere_in_anc(self, gt_wh):
+    def select_anch_in_thresh(self, gt_wh):
         gt_wh = gt_wh.view(-1, 1, 2)
 
-        anc_deltas = ((gt_wh + 1e-8) / self.anc_whs.unsqueeze(1)).view(3, self.bs, self.n_max_boxes, -1, 2)
+        anc_deltas = ((gt_wh + 1e-8) / self.anc_whs.unsqueeze(1)).view(self.na, self.bs, self.n_max_boxes, self.ng, 2)
 
-        max_layer, layer_idx = torch.max(anc_deltas, 1 / anc_deltas).max(0)
-
-        return max_layer, layer_idx
-
-    def get_layer_mask(self, gt_wh):
-        max_layer, layer_idx = self.select_layere_in_anc(gt_wh)
-        mask_layer = torch.zeros((3, self.bs, self.n_max_boxes, self.na, 2))
-        mask_layer.scatter_(0, layer_idx.unsqueeze(0), 1)
-        return max_layer, mask_layer
-
-    def select_anc_in_thresh(self, max_layer):
-        max_anc = max_layer.max(-1)[0]
+        max_anc = torch.max(anc_deltas, 1 / anc_deltas).max(-1)[0]
 
         mask_anc = max_anc < self.anchor_t
 
-        return mask_anc
+        return mask_anc, max_anc
 
-    def get_pos_mask(self, gt_cxy, max_layer, mask_gt):
+    def select_layer_in_anch(self, max_anc):
+        layer_idx = max_anc.max(0)[1]
+        mask_layer = torch.zeros((self.na, self.bs, self.n_max_boxes, self.ng), device=self.device)
+        mask_layer.scatter_(0, layer_idx.unsqueeze(0), 1)
+        return mask_layer
 
-        mask_anc = self.select_anc_in_thresh(max_layer)
+    def get_pos_mask(self, gt_cxy, gt_wh, mask_gt):
+
+        mask_anc, max_anc = self.select_anch_in_thresh(gt_wh)
+
+        max_layer = self.select_layer_in_anch(max_anc)
 
         bbox_deltas = self.get_box_metrics(gt_cxy)
 
@@ -372,9 +369,9 @@ class TaskNearestAssigner(nn.Module):
 
         mask_topk = self.select_topk_candidates(distance_metric, largest=False)
 
-        mask_pos = mask_topk * mask_gt * mask_anc
+        mask_pos = mask_topk * mask_gt
 
-        return mask_pos
+        return mask_pos, mask_anc, max_layer
 
     def get_box_metrics(self, gt_cxy):
         n_anchors = self.grid.shape[0]
@@ -392,23 +389,26 @@ class TaskNearestAssigner(nn.Module):
 
         return count_tensor.to(metrics.dtype)
 
-    def forward(self, anc_whs, gt_labels, gt_cxy, gt_wh, grid_size, strides, mask_gt):
-        self.bs = gt_labels.shape[0]
+    def forward(self, bs, anc_whs, gt_labels, gt_cxy, gt_wh, grid_size, strides, mask_gt):
+        self.bs = bs
         self.n_max_boxes = gt_labels.shape[1]
+        self.na = anc_whs.shape[0]
         self.device = mask_gt.device
 
         self.strides = self.strides_preprocess(grid_size, strides)
         self.anc_whs = self.anchor_preprocess(grid_size, anc_whs)
         self.grid = self.grids_preprocess(grid_size, strides)
-        self.na = self.grid.shape[0]
+        self.ng = self.grid.shape[0]
 
-        max_layer, layer_idx = self.get_layer_mask(gt_wh)
+        mask_pos, mask_anc, max_layer = self.get_pos_mask(gt_cxy, gt_wh, mask_gt)
 
-        mask_pos, layer_idx = self.get_pos_mask(gt_cxy, mask_gt, max_layer)
-
-        target_labels, gt_conf, target_bboxes, mask_pos = self.get_targets(gt_labels,
-                                                                           gt_cxy,
-                                                                           gt_wh,
-                                                                           mask_pos.bool())
-        anch = self.anc_whs.view(3, 1, 1, -1, 2).expand(-1, self.bs, self.n_max_boxes, -1, -1)
-        return anch, target_labels, gt_conf, target_bboxes, mask_pos.bool(), mask_layer
+        target_labels, target_conf, target_bboxes, mask_pos = self.get_targets(gt_labels,
+                                                                               gt_cxy,
+                                                                               gt_wh,
+                                                                               mask_pos.bool())
+        anch = self.anc_whs.view(self.na, 1, 1, self.ng, 2).expand(-1, self.bs, self.n_max_boxes, -1, -1)
+        mask_pos = mask_pos * mask_anc * max_layer
+        target_labels = target_labels.unsqueeze(0).expand(self.na, -1, -1, -1, -1)
+        target_confs = target_conf.unsqueeze(0).expand(self.na, -1, -1, -1, -1)
+        target_bboxes = target_bboxes.unsqueeze(0).expand(self.na, -1, -1, -1, -1)
+        return anch, target_labels, target_confs, target_bboxes, mask_pos.bool()

@@ -172,7 +172,7 @@ class YoloV5Head(nn.Module):
         for i in range(self.nl):
             x[i] = self.head[i](x[i])
             bs, _, ny, nx = x[i].shape  # x(bs,75,20,20) to x(bs,3,20,20,25)
-            x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 2, 1, 3, 4).contiguous()
+            x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
             # if not self.training:  # inference
             #     shape = 1, self.na, ny, nx, 2  # grid shape
             #
