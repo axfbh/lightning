@@ -303,6 +303,9 @@ class YoloLossV5(YoloAnchorBasedLoss):
             ], 2).split((4, 1, self.nc), -1)
 
         batch_size = pred_scores.shape[0]
+        pred_bboxes = pred_bboxes.permute(1, 0, 2, 3).contiguous()
+        pred_confs = pred_confs.permute(1, 0, 2, 3).contiguous()
+        pred_scores = pred_scores.permute(1, 0, 2, 3).contiguous()
 
         grid_size = torch.stack([
             torch.tensor(p.shape[-3:-1], device=self.device)
@@ -315,15 +318,10 @@ class YoloLossV5(YoloAnchorBasedLoss):
         ], 0)
 
         targets = self.targets_preprocess(targets, batch_size)
-        n_max_box = targets.shape[1]
-        pred_bboxes = pred_bboxes.permute(1, 0, 2, 3).contiguous().unsqueeze(2).expand(-1, -1, n_max_box, -1, -1)
-        pred_confs = pred_confs.permute(1, 0, 2, 3).contiguous().unsqueeze(2).expand(-1, -1, n_max_box, -1, -1)
-        pred_scores = pred_scores.permute(1, 0, 2, 3).contiguous().unsqueeze(2).expand(-1, -1, n_max_box, -1, -1)
         gt_labels, gt_cxy, gt_wh = targets.split((1, 2, 2), 2)  # cls, xyxy
         mask_gt = gt_cxy.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
 
-        anch, target_labels, target_confs, target_bboxes, mask_pos, = self.assigner(
-            batch_size,
+        anch, target_labels, target_confs, target_bboxes, fg_mask, = self.assigner(
             self.anchors,
             gt_labels,
             gt_cxy,
@@ -332,17 +330,17 @@ class YoloLossV5(YoloAnchorBasedLoss):
             strides,
             mask_gt,
         )
-        pxy = pred_bboxes[mask_pos][..., :2].sigmoid() * 3 - 1
-        pwh = pred_bboxes[mask_pos][..., 2:].sigmoid() ** 2 * anch[mask_pos]
+        pxy = pred_bboxes[fg_mask][..., :2].sigmoid() * 3 - 1
+        pwh = (pred_bboxes[fg_mask][..., 2:].sigmoid() * 2) ** 2 * anch[fg_mask]
         pbox = torch.cat([pxy, pwh], -1)
-        giou = iou_loss(pbox, target_bboxes[mask_pos], in_fmt='cxcywh', GIoU=True)
+        giou = iou_loss(pbox, target_bboxes[fg_mask], in_fmt='cxcywh', GIoU=True)
 
         loss[0] = (1.0 - giou).mean()
 
         if self.nc > 1:
-            loss[1] = self.BCEcls(pred_scores[mask_pos], target_labels[mask_pos])
+            loss[1] = self.BCEcls(pred_scores[fg_mask], target_labels[fg_mask])
 
-        loss[2] = self.BCEobj(pred_confs, target_confs.permute([0, 2, 3, 4, 1]).contiguous())
+        loss[2] = self.BCEobj(pred_confs, target_confs)
 
         loss[0] *= self.hyp["box"]
         loss[1] *= self.hyp["cls"]
