@@ -290,7 +290,7 @@ class YoloLossV5(YoloAnchorBasedLoss):
                 matches = i == j
                 n = matches.sum()
                 if n:
-                    out[j, :n] = targets[matches, 1:]
+                    out[j, :n] = targets[matches, 1:] - torch.tensor([1, 0, 0, 0, 0], device=targets.device)
             out[..., 1:5] = out[..., 1:5]
         return out
 
@@ -302,7 +302,7 @@ class YoloLossV5(YoloAnchorBasedLoss):
                 xi.view(feats[0].shape[0], self.na, -1, self.no) for xi in feats
             ], 2).split((4, 1, self.nc), -1)
 
-        batch_size = pred_scores.shape[1]
+        batch_size = pred_scores.shape[0]
 
         grid_size = torch.stack([
             torch.tensor(p.shape[-3:-1], device=self.device)
@@ -332,15 +332,17 @@ class YoloLossV5(YoloAnchorBasedLoss):
             strides,
             mask_gt,
         )
-
-        giou = iou_loss(pred_bboxes[mask_pos], target_bboxes[mask_pos], in_fmt='cxcywh', GIoU=True)
+        pxy = pred_bboxes[mask_pos][..., :2].sigmoid() * 3 - 1
+        pwh = pred_bboxes[mask_pos][..., 2:].sigmoid() ** 2 * anch[mask_pos]
+        pbox = torch.cat([pxy, pwh], -1)
+        giou = iou_loss(pbox, target_bboxes[mask_pos], in_fmt='cxcywh', GIoU=True)
 
         loss[0] = (1.0 - giou).mean()
 
         if self.nc > 1:
             loss[1] = self.BCEcls(pred_scores[mask_pos], target_labels[mask_pos])
 
-        loss[2] = self.BCEobj(pred_confs[mask_pos], target_confs[mask_pos])
+        loss[2] = self.BCEobj(pred_confs, target_confs.permute([0, 2, 3, 4, 1]).contiguous())
 
         loss[0] *= self.hyp["box"]
         loss[1] *= self.hyp["cls"]

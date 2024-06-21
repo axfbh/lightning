@@ -317,7 +317,6 @@ class TaskNearestAssigner(nn.Module):
         return torch.cat(z, 1)
 
     def get_targets(self, gt_labels, gt_cxy, gt_wh, mask_pos):
-        ng = mask_pos.shape[2]
 
         gt_cxy = gt_cxy.unsqueeze(2).expand(-1, -1, self.ng, -1)
         gt_wh = gt_wh.unsqueeze(2).expand(-1, -1, self.ng, -1)
