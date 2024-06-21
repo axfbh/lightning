@@ -298,30 +298,74 @@ class TaskNearestAssigner(nn.Module):
         self.topk = topk
         self.anchor_t = anchor_t
 
-    def make_grids(self, grids, strides):
+    def grids_preprocess(self, grids, strides):
         z = []
         for g, s in zip(grids, strides):
             z.append(make_grid(g[0], g[1], s[0], s[1], device=self.device))
         return torch.cat(z, 0)
 
-    def get_pos_mask(self, gt_bboxes, grids, strides, mask_gt):
-        bbox_deltas = self.cal_bbox_deltas(gt_bboxes, grids, strides)
+    def strides_preprocess(self, grid_size, strides):
+        z = []
+        for g, s in zip(grid_size, strides):
+            z.append(s.view(1, -1).expand(g[0] * g[1], -1))
+        return torch.cat(z, 0)
 
-        align_metric = bbox_deltas.abs().amin(-1)
+    def anchor_preprocess(self, grid_size, anc_whs):
+        z = []
+        for g, a in zip(grid_size, anc_whs):
+            z.append(a.unsqueeze(1).expand(-1, g[0] * g[1], -1))
+        return torch.cat(z, 1)
 
-        mask_topk = self.select_topk_candidates(align_metric, largest=False)
+    def get_targets(self, gt_labels, gt_bboxes, mask_pos):
+        na = mask_pos.shape[2]
+
+        gt_bboxes = gt_bboxes.unsqueeze(2).expand(-1, -1, na, -1)
+        gt_labels = gt_labels.unsqueeze(2).expand(-1, -1, na, -1)
+
+        cxy, wh = gt_bboxes.chunk(2, -1)
+
+        txy = self.grid - cxy
+
+        strides = self.get_strides()
+
+        txy = (txy / strides)
+        wh = (wh / strides)
+
+        gt_labels01 = torch.zeros((self.bs, self.n_max_boxes, na, self.num_classes),
+                                  dtype=torch.float,
+                                  device=self.device)
+        gt_labels01.scatter_(-1, gt_labels.long(), 1)
+
+        gt_conf = torch.zeros((self.bs, self.n_max_boxes, na),
+                              dtype=torch.float,
+                              device=self.device)
+        gt_conf[mask_pos] = 1
+
+        return gt_labels01, gt_conf, torch.cat([txy, wh], -1), mask_pos
+
+    def select_candidates_in_gts(self, gt_wh):
+        gt_wh = gt_wh.view(-1, 1, 2)
+
+        twh_deltas = (gt_wh / self.anc_whs.unsqueeze(1))
+
+    def get_pos_mask(self, gt_cxy, gt_wh, mask_gt):
+        mask_an = self.select_candidates_in_gts(gt_wh)
+
+        bbox_deltas = self.get_box_metrics(gt_cxy)
+
+        distance_metric = bbox_deltas.abs().sum(-1)
+
+        mask_topk = self.select_topk_candidates(distance_metric, largest=False)
 
         mask_pos = mask_topk * mask_gt
 
-    def cal_bbox_deltas(self, gt_bboxes, grids, strides):
-        grid = self.make_grids(grids, strides)
-        n_anchors = grid.shape[0]
-        txy, wh = gt_bboxes.view(-1, 1, 4).chunk(2, 2)
-        bbox_deltas = torch.cat((grid[None] - txy, txy - grid[None]), dim=2).view(self.bs,
-                                                                                  self.n_max_boxes,
-                                                                                  n_anchors,
-                                                                                  -1)
-        return bbox_deltas
+        return mask_pos
+
+    def get_box_metrics(self, gt_cxy):
+        n_anchors = self.grid.shape[0]
+        gt_cxy = gt_cxy.view(-1, 1, 2)
+        txy_deltas = (self.grid[None] - gt_cxy).view(self.bs, self.n_max_boxes, n_anchors, -1)
+        return txy_deltas
 
     def select_topk_candidates(self, metrics, largest=True):
         """
@@ -346,9 +390,18 @@ class TaskNearestAssigner(nn.Module):
 
         return count_tensor.to(metrics.dtype)
 
-    def forward(self, anc_points, gt_bboxes, grids, strides, mask_gt):
-        self.bs = gt_bboxes.shape[0]
-        self.n_max_boxes = gt_bboxes.shape[1]
+    def forward(self, anc_whs, gt_labels, gt_cxy, gt_wh, grid_size, strides, mask_gt):
+        self.bs = gt_labels.shape[0]
+        self.n_max_boxes = gt_labels.shape[1]
         self.device = mask_gt.device
 
-        self.get_pos_mask(gt_bboxes, grids, strides, mask_gt)
+        self.strides = self.strides_preprocess(grid_size, strides)
+        self.anc_whs = self.anchor_preprocess(grid_size, anc_whs)
+        self.grid = self.grids_preprocess(grid_size, strides)
+
+        mask_pos = self.get_pos_mask(gt_cxy, gt_wh, mask_gt)
+
+        # target_labels, gt_conf, target_bboxes, mask_pos = self.get_targets(gt_labels,
+        #                                                                    gt_bboxes,
+        #                                                                    mask_pos.bool())
+        # return target_labels, gt_conf, target_bboxes, mask_pos.bool()

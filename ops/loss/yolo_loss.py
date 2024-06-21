@@ -398,24 +398,26 @@ class YoloLossV5(YoloAnchorBasedLoss):
 
         batch_size = pred_scores.shape[0]
 
-        grids = torch.stack([
+        grid_size = torch.stack([
             torch.tensor(p.shape[-2:], device=self.device)
             for p in preds
         ], 0)
 
         strides = torch.stack([
             image_size / s
-            for s in grids
+            for s in grid_size
         ], 0)
 
         targets = self.targets_preprocess(targets, batch_size)
-        gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy
-        mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
+        gt_labels, gt_cxy, gt_wh = targets.split((1, 2, 2), 2)  # cls, xyxy
+        mask_gt = gt_cxy.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
 
-        _, target_bboxes, target_scores, fg_mask, _ = self.assigner(
+        target_labels, gt_conf, target_bboxes, mask_pos = self.assigner(
             self.anchors,
-            gt_bboxes,
-            grids,
+            gt_labels,
+            gt_cxy,
+            gt_wh,
+            grid_size,
             strides,
             mask_gt,
         )
