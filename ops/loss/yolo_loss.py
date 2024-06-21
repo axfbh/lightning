@@ -391,10 +391,10 @@ class YoloLossV5(YoloAnchorBasedLoss):
     def forward(self, preds, targets, image_size):
         loss = torch.zeros(3, dtype=torch.float32, device=self.device)
         feats = preds[1] if isinstance(preds, tuple) else preds
-        pred_bboxes, pred_scores = torch.cat(
+        pred_bboxes, pred_conf, pred_scores = torch.cat(
             [
-                xi.view(feats[0].shape[0], self.na * self.no, -1) for xi in feats
-            ], 2).split((4 * self.na, (1 + self.nc) * self.na), 1)
+                xi.view(feats[0].shape[0], self.no, -1) for xi in feats
+            ], 2).split((4, 1, self.nc), 1)
 
         batch_size = pred_scores.shape[0]
 
@@ -412,7 +412,7 @@ class YoloLossV5(YoloAnchorBasedLoss):
         gt_labels, gt_cxy, gt_wh = targets.split((1, 2, 2), 2)  # cls, xyxy
         mask_gt = gt_cxy.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
 
-        target_labels, gt_conf, target_bboxes, mask_pos = self.assigner(
+        target_labels, gt_conf, target_bboxes, mask_pos, anch, mask_anch = self.assigner(
             self.anchors,
             gt_labels,
             gt_cxy,
@@ -421,6 +421,8 @@ class YoloLossV5(YoloAnchorBasedLoss):
             strides,
             mask_gt,
         )
+
+        a = 1
 
 
 class YoloLossV7(YoloAnchorBasedLoss):
