@@ -306,7 +306,7 @@ class YoloLossV5(YoloAnchorBasedLoss):
     def grids_preprocess(self, grid_sizes):
         z = []
         for g in grid_sizes:
-            z.append(make_grid(g[0], g[1], device=self.device))
+            z.append(make_grid(g[0], g[1], device=self.device) + 0.5)
         return z
 
     def make_anchors(self, strides):
@@ -339,7 +339,7 @@ class YoloLossV5(YoloAnchorBasedLoss):
 
         targets = self.targets_preprocess(targets, batch_size)
         gt_labels, gt_cxy, gt_wh = targets.split((1, 2, 2), 2)  # cls, xyxy
-        mask_gt = gt_cxy.sum(2).gt_(0)  # [b,n_box,1]
+        mask_gt = gt_cxy.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
 
         anch, target_labels, target_confs, target_bboxes, fg_mask, = self.assigner(
             self.anchors,

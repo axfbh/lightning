@@ -300,7 +300,7 @@ class TaskNearestAssigner(nn.Module):
         self.topk = topk
         self.anchor_t = anchor_t
 
-    def get_targets(self, grids, gt_labels, gt_cxy, gt_wh, strides, target_gt_idx, fg_mask):
+    def get_targets(self, gt_labels, gt_cxy, gt_wh, strides, target_gt_idx, fg_mask):
         batch_ind = torch.arange(end=self.bs, dtype=torch.int64, device=gt_labels.device)[..., None]
         target_gt_idx = target_gt_idx + batch_ind * self.n_max_boxes  # (b, h*w)
         target_labels = gt_labels.long().flatten()[target_gt_idx]  # (b, h*w)
@@ -308,10 +308,7 @@ class TaskNearestAssigner(nn.Module):
         target_cxys = gt_cxy.view(-1, gt_cxy.shape[-1])[target_gt_idx]
         target_whs = gt_wh.view(-1, gt_wh.shape[-1])[target_gt_idx]
 
-        target_txys = grids - target_cxys
-
-        target_txys = target_txys / strides
-        target_whs = target_whs / strides
+        # target_txys = grids - target_cxys
 
         target_scores = torch.zeros((self.bs, self.ng, self.num_classes),
                                     dtype=torch.float,
@@ -323,10 +320,10 @@ class TaskNearestAssigner(nn.Module):
                                    device=self.device)
         target_confs[fg_mask.bool()] = 1
 
-        return target_scores, target_confs, torch.cat([target_txys, target_whs], -1)
+        return target_scores, target_confs, torch.cat([target_cxys, target_whs], -1)
 
-    def get_pos_mask(self, grids, gt_cxy, mask_gt):
-        bbox_deltas = self.get_box_metrics(grids, gt_cxy)
+    def get_pos_mask(self, grid, gt_cxy, mask_gt):
+        bbox_deltas = self.get_box_metrics(grid, gt_cxy)
 
         distance_metric = bbox_deltas.abs().sum(-1)
 
@@ -336,10 +333,10 @@ class TaskNearestAssigner(nn.Module):
 
         return mask_pos
 
-    def get_box_metrics(self, grids, gt_cxy):
-        n_anchors = grids.shape[0]
+    def get_box_metrics(self, grid, gt_cxy):
+        n_anchors = grid.shape[0]
         gt_cxy = gt_cxy.view(-1, 1, 2)
-        txy_deltas = (grids[None] - gt_cxy).view(self.bs, self.n_max_boxes, n_anchors, -1)
+        txy_deltas = (grid[None] - gt_cxy).view(self.bs, self.n_max_boxes, n_anchors, -1)
         return txy_deltas
 
     def select_topk_candidates(self, metrics, largest=True):
@@ -360,4 +357,7 @@ class TaskNearestAssigner(nn.Module):
             grid = grids[i]
             anc_wh = anc_whs[i]
             stride = strides[i]
-            a = 1
+            mask_pos = self.get_pos_mask(grid, gt_cxy / stride, mask_gt)
+            fg_mask = mask_pos.sum(1)
+            target_gt_idx = mask_pos.argmax(2)
+            self.get_targets(gt_labels,)
