@@ -300,64 +300,142 @@ class TaskNearestAssigner(nn.Module):
         self.topk = topk
         self.anchor_t = anchor_t
 
-    def get_targets(self, grids, gt_labels, gt_cxy, gt_wh, strides, target_gt_idx, fg_mask):
+    def get_targets(self, gt_labels, gt_cxy, gt_wh, mask_pos):
         batch_ind = torch.arange(end=self.bs, dtype=torch.int64, device=gt_labels.device)[..., None]
+        target_gt_idx = mask_pos.argmax(-2)  # (b, h*w)
         target_gt_idx = target_gt_idx + batch_ind * self.n_max_boxes  # (b, h*w)
         target_labels = gt_labels.long().flatten()[target_gt_idx]  # (b, h*w)
 
         target_cxys = gt_cxy.view(-1, gt_cxy.shape[-1])[target_gt_idx]
-        target_whs = gt_wh.view(-1, gt_wh.shape[-1])[target_gt_idx]
+        target_whs = gt_cxy.view(-1, gt_wh.shape[-1])[target_gt_idx]
 
-        target_txys = grids - target_cxys
+        txys = self.grid - target_cxys
 
-        target_txys = target_txys / strides
-        target_whs = target_whs / strides
+        target_txys = (txys / self.strides)
+        target_whs = (target_whs / self.strides)
 
         target_scores = torch.zeros((self.bs, self.ng, self.num_classes),
                                     dtype=torch.float,
                                     device=target_labels.device)  # (b, h*w, 80)
         target_scores.scatter_(2, target_labels.unsqueeze(-1), 1)
 
-        target_confs = torch.zeros((self.bs, self.ng, 1),
-                                   dtype=torch.float,
-                                   device=self.device)
-        target_confs[fg_mask.bool()] = 1
+        gt_conf = torch.zeros((self.bs, self.ng, 1),
+                              dtype=torch.float,
+                              device=self.device)
+        gt_conf[mask_pos.sum(-2).bool()] = 1
 
-        return target_scores, target_confs, torch.cat([target_txys, target_whs], -1)
+        return target_scores, gt_conf, torch.cat([target_txys, target_whs], -1), mask_pos
 
-    def get_pos_mask(self, grids, gt_cxy, mask_gt):
-        bbox_deltas = self.get_box_metrics(grids, gt_cxy)
+    def select_anch_wh_in_thresh(self, anc_whs, gt_wh, strides):
+        gt_wh = gt_wh.view(1, 1, -1, 1, 2).expand(self.nl, -1, -1, -1, -1) / strides.view(self.nl, 1, 1, 1, 2)
 
-        distance_metric = bbox_deltas.abs().sum(-1)
+        anc_deltas = ((gt_wh + 1e-8) / anc_whs.unsqueeze(2)).view(self.nl,
+                                                                  self.na,
+                                                                  self.bs,
+                                                                  self.n_max_boxes,
+                                                                  self.ng,
+                                                                  2)
 
-        mask_topk = self.select_topk_candidates(distance_metric, largest=False)
+        max_anc_wh = torch.max(anc_deltas, 1 / anc_deltas).amax(-1)
 
-        mask_pos = mask_topk * mask_gt
+        mask_anc_wh = max_anc_wh < self.anchor_t
 
-        return mask_pos
+        return mask_anc_wh, max_anc_wh
 
-    def get_box_metrics(self, grids, gt_cxy):
-        n_anchors = grids.shape[0]
-        gt_cxy = gt_cxy.view(-1, 1, 2)
-        txy_deltas = (grids[None] - gt_cxy).view(self.bs, self.n_max_boxes, n_anchors, -1)
-        return txy_deltas
+    # def get_pos_mask(self, gt_cxy, gt_wh, mask_gt):
+    #     mask_anc, max_anc = self.select_anch_in_thresh(gt_wh,)
+    #
+    #     max_layer = self.select_layer_in_anch(max_anc)
+    #
+    #     bbox_deltas = self.get_box_metrics(gt_cxy)
+    #
+    #     distance_metric = bbox_deltas.abs().sum(-1)
+    #
+    #     mask_topk = self.select_topk_candidates(distance_metric, largest=False)
+    #
+    #     mask_pos = mask_topk * mask_gt
+    #
+    #     return mask_pos, mask_anc, max_layer
 
-    def select_topk_candidates(self, metrics, largest=True):
-        # 每个 bbox 选取网格内 topk 个正样本
-        topk_metrics, topk_idxs = torch.topk(metrics, self.topk, dim=2, largest=largest)
+    # def get_box_metrics(self, gt_cxy):
+    #     n_anchors = self.grid.shape[0]
+    #     gt_cxy = gt_cxy.view(-1, 1, 2)
+    #     txy_deltas = (self.grid[None] - gt_cxy).view(self.bs, self.n_max_boxes, n_anchors, -1)
+    #     return txy_deltas
+    #
+    # def select_topk_candidates(self, metrics, largest=True):
+    #     # 每个 bbox 选取网格内 topk 个正样本
+    #     topk_metrics, topk_idxs = torch.topk(metrics, self.topk, dim=2, largest=largest)
+    #
+    #     count_tensor = torch.zeros(metrics.shape, dtype=torch.int8, device=metrics.device)
+    #     count_tensor.scatter_(-1, topk_idxs, 1)
+    #
+    #     return count_tensor.to(metrics.dtype)
 
-        count_tensor = torch.zeros(metrics.shape, dtype=torch.int8, device=metrics.device)
-        count_tensor.scatter_(-1, topk_idxs, 1)
+    def get_anchor(self, anc_whs, gt_wh, strides):
+        mask_anc, max_anc_wh = self.select_anch_wh_in_thresh(anc_whs, gt_wh, strides)
 
-        return count_tensor.to(metrics.dtype)
+        max_anc_layer, layer_idx = max_anc_wh.max(0)
+
+        anc_whs = anc_whs.view(self.nl, self.na, 1, 1, self.ng, 2).expand(-1, -1, self.bs, self.n_max_boxes, -1, -1)
+
+        na_ind = torch.arange(end=self.na, dtype=torch.int64, device=anc_whs.device).view(-1, 1)
+        bs_ind = torch.arange(end=self.bs, dtype=torch.int64, device=anc_whs.device).view(1, -1).expand(self.na, -1)
+        n_max_boxes_ind = torch.arange(end=self.n_max_boxes, dtype=torch.int64, device=anc_whs.device).view(1,
+                                                                                                            1,
+                                                                                                            -1).expand(self.na, self.bs,-1)
+        layer_idx = layer_idx + na_ind * bs_ind * n_max_boxes_ind * self.ng  # (b, h*w)
+
+        # anc_whs_tmp = torch.zeros((self.na, self.bs, self.n_max_boxes, self.ng, 2), device=self.device)
+        #
+        # for i in range(len(layer_idx)):
+        #     for j in range(len(layer_idx[i])):
+        #         for k in range(len(layer_idx[i][j])):
+        #             for l, idx in enumerate(layer_idx[i][j][k]):
+        #                 anc_whs_tmp[i, j, k, l] = anc_whs[idx, i, l]
+        #
+        # pass
+        # mask_layer = torch.zeros((self.nl, self.na, self.bs, self.n_max_boxes, self.ng), device=self.device)
+        #
+        # mask_layer.scatter_(0, layer_idx, 1)
+        #
+        # pass
+
+        # nl_ind = torch.arange(end=self.nl, dtype=torch.int64, device=anc_whs.device)[..., None, None, None]
+        #
+        # anc_whs = anc_whs.view(-1, 2)[layer_idx]
+
+        # mask_anc = mask_anc.flatten()[layer_idx]
+        #
+        # anc_idx = max_anc_layer.argmax(0)
+        #
+        # na_ind = torch.arange(end=self.bs, dtype=torch.int64, device=anc_whs.device)[..., None, None]
+        #
+        # anc_idx = (anc_idx + na_ind * self.n_max_boxes)
+        #
+        # anc_whs = anc_whs.flatten()[anc_idx]
+        #
+        # mask_anc = mask_anc.flatten()[anc_idx]
+        #
+        # return anc_whs, mask_anc
 
     def forward(self, anc_whs, grids, gt_labels, gt_cxy, gt_wh, strides, mask_gt):
         self.bs = gt_labels.shape[0]
         self.n_max_boxes = gt_labels.shape[1]
         self.device = mask_gt.device
+        self.ng = grids.shape[0]
 
-        for i in range(self.nl):
-            grid = grids[i]
-            anc_wh = anc_whs[i]
-            stride = strides[i]
-            a = 1
+        anc_whs = self.get_anchor(anc_whs, gt_wh, strides)
+
+        # mask_pos, mask_anc, max_layer = self.get_pos_mask(gt_cxy, gt_wh, mask_gt)
+        #
+        # target_labels, target_confs, target_bboxes, mask_pos = self.get_targets(gt_labels,
+        #                                                                         gt_cxy,
+        #                                                                         gt_wh,
+        #                                                                         mask_pos)
+        # anch = self.anc_whs.view(self.na, 1, self.ng, 2).expand(-1, self.bs, -1, -1)
+        # target_labels = target_labels.unsqueeze(0).expand(self.na, -1, -1, -1)
+        # target_confs = target_confs.unsqueeze(0).expand(self.na, -1, -1, -1)
+        # target_bboxes = target_bboxes.unsqueeze(0).expand(self.na, -1, -1, -1)
+        # fg_mask = (mask_pos * mask_anc * max_layer).sum(-2).bool()
+        # return anch, target_labels, target_confs, target_bboxes, fg_mask

@@ -24,7 +24,10 @@ class YoloAnchorBasedLoss(BasicLoss):
         self.na = m.na
         self.nc = m.nc
         self.no = m.no
-        self.assigner = TaskNearestAssigner(anchor_t=self.hyp['anchor_t'], topk=3, num_classes=self.nc)
+        self.assigner = TaskNearestAssigner(anchor_t=self.hyp['anchor_t'],
+                                            topk=3,
+                                            num_classes=self.nc,
+                                            num_acnhors=m.na)
 
         self.balance = [4.0, 1.0, 0.4]
 
@@ -43,7 +46,7 @@ class YoloAnchorFreeLoss(BasicLoss):
 
         m = model.head
 
-        self.anchors = m.make_anchors
+        self.make_anchors = m.make_anchors
         self.nl = m.nl
         self.nc = m.nc
         self.no = m.no
@@ -294,6 +297,25 @@ class YoloLossV5(YoloAnchorBasedLoss):
             out[..., 1:5] = out[..., 1:5]
         return out
 
+    def strides_preprocess(self, grid_size, strides):
+        z = []
+        for g, s in zip(grid_size, strides):
+            z.append(s.view(1, -1).expand(g[0] * g[1], -1))
+        return torch.cat(z, 0)
+
+    def grids_preprocess(self, grid_sizes):
+        z = []
+        for g in grid_sizes:
+            z.append(make_grid(g[0], g[1], device=self.device))
+        return z
+
+    def make_anchors(self, strides):
+        z = []
+        for i, s in enumerate(strides):
+            z.append((self.anchors[i] / s))
+
+        return torch.stack(z, 0)
+
     def forward(self, preds, targets, image_size):
         loss = torch.zeros(3, dtype=torch.float32, device=self.device)
         feats = preds[1] if isinstance(preds, tuple) else preds
@@ -301,11 +323,6 @@ class YoloLossV5(YoloAnchorBasedLoss):
             [
                 xi.view(feats[0].shape[0], self.na, -1, self.no) for xi in feats
             ], 2).split((4, 1, self.nc), -1)
-
-        batch_size = pred_scores.shape[0]
-        pred_bboxes = pred_bboxes.permute(1, 0, 2, 3).contiguous()
-        pred_confs = pred_confs.permute(1, 0, 2, 3).contiguous()
-        pred_scores = pred_scores.permute(1, 0, 2, 3).contiguous()
 
         grid_size = torch.stack([
             torch.tensor(p.shape[-3:-1], device=self.device)
@@ -317,16 +334,19 @@ class YoloLossV5(YoloAnchorBasedLoss):
             for s in grid_size
         ], 0)
 
+        batch_size = pred_scores.shape[0]
+        grids = self.grids_preprocess(grid_size)
+
         targets = self.targets_preprocess(targets, batch_size)
         gt_labels, gt_cxy, gt_wh = targets.split((1, 2, 2), 2)  # cls, xyxy
-        mask_gt = gt_cxy.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
+        mask_gt = gt_cxy.sum(2).gt_(0)  # [b,n_box,1]
 
         anch, target_labels, target_confs, target_bboxes, fg_mask, = self.assigner(
             self.anchors,
+            grids,
             gt_labels,
             gt_cxy,
             gt_wh,
-            grid_size,
             strides,
             mask_gt,
         )
@@ -523,7 +543,7 @@ class YoloLossV8(YoloAnchorFreeLoss):
         dtype = pred_scores.dtype
         batch_size = pred_scores.shape[0]
         # make grid
-        anchor_points, stride_tensor = self.anchors(image_size, preds)
+        anchor_points, stride_tensor = self.make_anchors(image_size, preds)
 
         targets = self.targets_preprocess(targets, batch_size)
         gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy
