@@ -309,6 +309,13 @@ class YoloLossV5(YoloAnchorBasedLoss):
             z.append(make_grid(g[0], g[1], device=self.device))
         return z
 
+    def make_anchors(self, strides):
+        z = []
+        for i, s in enumerate(strides):
+            z.append((self.anchors[i] / s))
+
+        return torch.stack(z, 0)
+
     def forward(self, preds, targets, image_size):
         loss = torch.zeros(3, dtype=torch.float32, device=self.device)
         feats = preds[1] if isinstance(preds, tuple) else preds
@@ -318,9 +325,9 @@ class YoloLossV5(YoloAnchorBasedLoss):
 
         grid_size = torch.stack([torch.tensor(p[0].shape[-3:-1], device=self.device) for p in feats], 0)
 
-        strides = image_size / grid_size
+        strides = torch.stack([image_size / s for s in grid_size], 0)
 
-        batch_size = feats[0].shape[0]
+        batch_size = preds[0][0].shape[0]
         grids = self.grids_preprocess(grid_size)
 
         targets = self.targets_preprocess(targets, batch_size)
@@ -342,33 +349,26 @@ class YoloLossV5(YoloAnchorBasedLoss):
             target_score = t_scores[i]
             target_anch = t_anchs[i]
             target_mask = t_masks[i]
-
             pred_bboxes, pred_confs, pred_scores = preds[i]
 
-            tobj = torch.zeros_like(target_mask, dtype=pred_confs.dtype)
-
             if target_mask.sum() > 1:
-                ps = pred_bboxes[target_mask]
-                pxy = ps[:, :2].sigmoid() * 2 - 0.5
-                pwh = (ps[:, 2:].sigmoid() * 2) ** 2 * target_anch[target_mask]
+                pxy = pred_bboxes[target_mask.bool()][..., :2].sigmoid() * 2 - 0.5
+                pwh = (pred_bboxes[target_mask.bool()][..., 2:].sigmoid() * 2) ** 2 * target_anch[target_mask.bool()]
                 pbox = torch.cat([pxy, pwh], -1)
-                tbox = torch.cat([target_cxy[target_mask], target_wh[target_mask]], -1)
-                iou = iou_loss(pbox, tbox, in_fmt='cxcywh', CIoU=True)
+                tbox = torch.cat([target_cxy[target_mask.bool()], target_wh[target_mask.bool()]], -1)
+                giou = iou_loss(pbox, tbox, in_fmt='cxcywh', GIoU=True)
 
-                loss[0] += (1.0 - iou).mean()
-
-                iou = iou.detach().clamp(0).type(tobj.dtype)
-                tobj[target_mask] = iou  # iou ratio
+                loss[0] += (1.0 - giou).mean()
 
                 if self.nc > 1:
-                    loss[2] += self.BCEcls(pred_scores[target_mask], target_score[target_mask])
+                    loss[2] += self.BCEcls(pred_scores[target_mask.bool()], target_score[target_mask.bool()])
 
-            obji = self.BCEobj(pred_confs, tobj.unsqueeze(-1))
-            loss[1] += obji * self.balance[i]  # obj loss
+            loss[1] += self.BCEobj(pred_confs, target_mask.unsqueeze(-1))
+            loss[1] += loss[1] * self.balance[i]  # obj loss
 
-        loss[0] *= self.hyp["box"]
-        loss[1] *= self.hyp["obj"]
-        loss[2] *= self.hyp["cls"]
+            loss[0] *= self.hyp["box"]
+            loss[1] *= self.hyp["obj"]
+            loss[2] *= self.hyp["cls"]
 
         return loss.sum() * batch_size, loss.detach()  # loss(box, cls, dfl)
 

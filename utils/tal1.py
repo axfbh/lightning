@@ -292,98 +292,57 @@ class TaskAlignedAssigner(nn.Module):
 
 
 class TaskNearestAssigner(nn.Module):
-    def __init__(self, topk=3, num_classes=20, anchor_t=4):
+    def __init__(self, topk=3, num_classes=20, anchor_t=4, num_layers=3, num_acnhors=3):
         super(TaskNearestAssigner, self).__init__()
+        self.nl = num_layers
+        self.na = num_acnhors
         self.num_classes = num_classes
         self.topk = topk
         self.anchor_t = anchor_t
 
-    def grids_preprocess(self, grids, strides):
-        z = []
-        for g, s in zip(grids, strides):
-            z.append(make_grid(g[0], g[1], s[0], s[1], device=self.device))
-        return torch.cat(z, 0)
-
-    def strides_preprocess(self, grid_size, strides):
-        z = []
-        for g, s in zip(grid_size, strides):
-            z.append(s.view(1, -1).expand(g[0] * g[1], -1))
-        return torch.cat(z, 0)
-
-    def anchor_preprocess(self, grid_size, anc_whs):
-        z = []
-        for g, a in zip(grid_size, anc_whs):
-            z.append(a.unsqueeze(1).expand(-1, g[0] * g[1], -1))
-        return torch.cat(z, 1)
-
-    def get_targets(self, gt_labels, gt_cxy, gt_wh, mask_pos):
-
-        batch_ind = torch.arange(end=self.bs, dtype=torch.int64, device=gt_labels.device)[..., None]
-        target_gt_idx = mask_pos.argmax(-2)  # (b, h*w)
+    def get_targets(self, gt_labels, gt_cxy, gt_wh, txy_deltas, target_gt_idx, mask_pos, fg_mask, ng):
+        batch_ind = torch.arange(end=self.bs, dtype=torch.int64, device=gt_labels.device)[..., None, None]
         target_gt_idx = target_gt_idx + batch_ind * self.n_max_boxes  # (b, h*w)
         target_labels = gt_labels.long().flatten()[target_gt_idx]  # (b, h*w)
+        # fg_mask = mask_pos.sum(1)
 
         target_cxys = gt_cxy.view(-1, gt_cxy.shape[-1])[target_gt_idx]
+        target_txy = torch.zeros_like(target_cxys)
+        target_txy[fg_mask.bool()] = target_cxys[fg_mask.bool()] - (
+                target_cxys[fg_mask.bool()] + txy_deltas[mask_pos.bool()]
+        ).int()
         target_whs = gt_wh.view(-1, gt_wh.shape[-1])[target_gt_idx]
 
-        txys = self.grid - target_cxys
-
-        target_txys = (txys / self.strides)
-        target_whs = (target_whs / self.strides)
-
-        target_scores = torch.zeros((self.bs, self.ng, self.num_classes),
+        target_scores = torch.zeros((self.bs, self.na, ng, self.num_classes),
                                     dtype=torch.float,
                                     device=target_labels.device)  # (b, h*w, 80)
-        target_scores.scatter_(2, target_labels.unsqueeze(-1), 1)
+        target_scores.scatter_(-1, target_labels.unsqueeze(-1), 1)
 
-        gt_conf = torch.zeros((self.bs, self.ng, 1),
-                              dtype=torch.float,
-                              device=self.device)
-        gt_conf[mask_pos.sum(-2).bool()] = 1
+        return target_scores, target_txy, target_whs
 
-        return target_scores, gt_conf, torch.cat([target_txys, target_whs], -1), mask_pos
+    def get_pos_mask(self, grid, gt_cxy, mask_gt):
+        distance_deltas, txy_deltas = self.get_box_metrics(grid, gt_cxy)
 
-    def select_anch_in_thresh(self, gt_wh):
-        gt_wh = gt_wh.view(-1, 1, 2)
-
-        anc_deltas = ((gt_wh + 1e-8) / self.anc_whs.unsqueeze(1)).view(self.na, self.bs, self.n_max_boxes, self.ng, 2)
-
-        max_anc = torch.max(anc_deltas, 1 / anc_deltas).max(-1)[0]
-
-        mask_anc = max_anc < self.anchor_t
-
-        return mask_anc, max_anc
-
-    def select_layer_in_anch(self, max_anc):
-        layer_idx = max_anc.max(0)[1]
-        mask_layer = torch.zeros((self.na, self.bs, self.n_max_boxes, self.ng), device=self.device)
-        mask_layer.scatter_(0, layer_idx.unsqueeze(0), 1)
-        return mask_layer
-
-    def get_pos_mask(self, gt_cxy, gt_wh, mask_gt):
-
-        mask_anc, max_anc = self.select_anch_in_thresh(gt_wh)
-
-        max_layer = self.select_layer_in_anch(max_anc)
-
-        bbox_deltas = self.get_box_metrics(gt_cxy)
-
-        distance_metric = bbox_deltas.abs().sum(-1)
+        distance_metric = distance_deltas.abs().sum(-1)
 
         mask_topk = self.select_topk_candidates(distance_metric, largest=False)
 
-        mask_pos = mask_topk * mask_gt
+        mask_pos = (mask_topk * mask_gt).view(self.bs, 1, self.n_max_boxes, -1).expand(-1, self.na, -1, -1)
 
-        return mask_pos, mask_anc, max_layer
+        distance_metric = distance_metric.view(self.bs, 1, self.n_max_boxes, -1).expand(-1, self.na, -1, -1)
 
-    def get_box_metrics(self, gt_cxy):
-        n_anchors = self.grid.shape[0]
+        txy_deltas = txy_deltas.view(self.bs, 1, self.n_max_boxes, -1, 2).expand(-1, self.na, -1, -1, -1)
+
+        return mask_pos, distance_metric, txy_deltas
+
+    def get_box_metrics(self, grid, gt_cxy):
+        n_anchors = grid.shape[0]
         gt_cxy = gt_cxy.view(-1, 1, 2)
-        txy_deltas = (self.grid[None] - gt_cxy).view(self.bs, self.n_max_boxes, n_anchors, -1)
-        return txy_deltas
+        distance_deltas = ((grid[None] + 0.5) - gt_cxy).view(self.bs, self.n_max_boxes, n_anchors, -1)
+        txy_deltas = (grid[None] - gt_cxy.long()).view(self.bs, self.n_max_boxes, n_anchors, -1)
+        return distance_deltas, txy_deltas
 
     def select_topk_candidates(self, metrics, largest=True):
-
         # 每个 bbox 选取网格内 topk 个正样本
         topk_metrics, topk_idxs = torch.topk(metrics, self.topk, dim=2, largest=largest)
 
@@ -392,26 +351,74 @@ class TaskNearestAssigner(nn.Module):
 
         return count_tensor.to(metrics.dtype)
 
-    def forward(self, anc_whs, gt_labels, gt_cxy, gt_wh, grid_size, strides, mask_gt):
+    @staticmethod
+    def select_highest_overlaps(mask_pos, overlaps, n_max_boxes):
+        """
+        If an anchor box is assigned to multiple gts, the one with the highest IoU will be selected.
+
+        Args:
+            mask_pos (Tensor): shape(b, n_max_boxes, h*w)
+            overlaps (Tensor): shape(b, n_max_boxes, h*w)
+
+        Returns:
+            target_gt_idx (Tensor): shape(b, h*w)
+            fg_mask (Tensor): shape(b, h*w)
+            mask_pos (Tensor): shape(b, n_max_boxes, h*w)
+        """
+        # (b, n_max_boxes, h*w) -> (b, h*w)
+        # 将每个网格的bbox合并一起，统计一个网格的bbox数量
+        fg_mask = mask_pos.sum(-2)
+        # 至少有一个重叠目标
+        if fg_mask.max() > 1:
+            mask_multi_gts = (fg_mask.unsqueeze(2) > 1).expand(-1, -1, n_max_boxes, -1)  # (b, n_max_boxes, h*w)
+            max_overlaps_idx = overlaps.argmax(-2)  # (b, h*w)
+
+            non_overlaps = torch.ones(mask_pos.shape, dtype=mask_pos.dtype, device=mask_pos.device)
+            # 重叠位置全部置为 0
+            non_overlaps[mask_multi_gts] = 0
+            # 重叠位最大分数置置为 1
+            non_overlaps.scatter_(-2, max_overlaps_idx.unsqueeze(-2), 1)
+
+            mask_pos = non_overlaps * mask_pos
+            fg_mask = mask_pos.sum(-2)
+
+        # Find each grid serve which gt(index)
+        target_gt_idx = mask_pos.argmax(-2)  # (b, h*w)
+        return target_gt_idx, fg_mask, mask_pos
+
+    @torch.no_grad()
+    def forward(self, anc_whs, grids, gt_labels, gt_cxy, gt_wh, strides, mask_gt):
         self.bs = gt_labels.shape[0]
         self.n_max_boxes = gt_labels.shape[1]
-        self.na = anc_whs.shape[0]
         self.device = mask_gt.device
 
-        self.strides = self.strides_preprocess(grid_size, strides)
-        self.anc_whs = self.anchor_preprocess(grid_size, anc_whs)
-        self.grid = self.grids_preprocess(grid_size, strides)
-        self.ng = self.grid.shape[0]
+        t_cxys, t_whs, t_scores, t_anchs, t_masks = [], [], [], [], []
 
-        mask_pos, mask_anc, max_layer = self.get_pos_mask(gt_cxy, gt_wh, mask_gt)
+        for i in range(self.nl):
+            grid = grids[i]
+            anc_wh = anc_whs[i]
+            stride = strides[i]
+            ng = grid.shape[0]
+            mask_pos, distance_metric, txy_deltas = self.get_pos_mask(grid, gt_cxy / stride, mask_gt)
 
-        target_labels, target_confs, target_bboxes, mask_pos = self.get_targets(gt_labels,
-                                                                                gt_cxy,
-                                                                                gt_wh,
-                                                                                mask_pos)
-        anch = self.anc_whs.view(self.na, 1, self.ng, 2).expand(-1, self.bs, -1, -1)
-        target_labels = target_labels.unsqueeze(0).expand(self.na, -1, -1, -1)
-        target_confs = target_confs.unsqueeze(0).expand(self.na, -1, -1, -1)
-        target_bboxes = target_bboxes.unsqueeze(0).expand(self.na, -1, -1, -1)
-        fg_mask = (mask_pos * mask_anc * max_layer).sum(-2).bool()
-        return anch, target_labels, target_confs, target_bboxes, fg_mask
+            target_gt_idx, fg_mask, mask_pos = self.select_highest_overlaps(mask_pos, distance_metric, self.n_max_boxes)
+
+            target_scores, target_cxys, target_whs = self.get_targets(gt_labels,
+                                                                      gt_cxy / stride,
+                                                                      gt_wh / stride,
+                                                                      txy_deltas,
+                                                                      target_gt_idx,
+                                                                      mask_pos,
+                                                                      fg_mask,
+                                                                      ng)
+            anc_wh = anc_wh.view(1, self.na, 1, -1).expand(self.bs, -1, ng, -1)
+            r = target_whs / anc_wh
+            j = (torch.max(r, 1 / r).max(-1)[0] < self.anchor_t)
+            fg_mask = fg_mask * j
+
+            t_cxys.append(target_cxys)
+            t_whs.append(target_whs)
+            t_scores.append(target_scores)
+            t_anchs.append(anc_wh)
+            t_masks.append(fg_mask)
+        return t_cxys, t_whs, t_scores, t_anchs, t_masks
