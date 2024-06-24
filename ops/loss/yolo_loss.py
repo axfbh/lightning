@@ -297,12 +297,6 @@ class YoloLossV5(YoloAnchorBasedLoss):
             out[..., 1:5] = out[..., 1:5]
         return out
 
-    def strides_preprocess(self, grid_size, strides):
-        z = []
-        for g, s in zip(grid_size, strides):
-            z.append(s.view(1, -1).expand(g[0] * g[1], -1))
-        return torch.cat(z, 0)
-
     def grids_preprocess(self, grid_sizes):
         z = []
         for g in grid_sizes:
