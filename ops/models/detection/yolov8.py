@@ -7,6 +7,7 @@ from ops.models.backbone.utils import _cspdarknet_extractor
 from ops.models.head.yolo_head import YoloV8Head
 from ops.models.detection.utils import Yolo
 from ops.loss.yolo_loss import YoloLossV8
+from ops.metric.DetectionMetric import MeanAveragePrecision
 
 
 class YoloV8(Yolo):
@@ -100,4 +101,5 @@ class YoloV8(Yolo):
         self.compute_loss = YoloLossV8(self)
 
     def configure_model(self) -> None:
-        pass
+        self.box_map_metric = MeanAveragePrecision(device=self.device, background=False)
+

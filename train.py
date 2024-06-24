@@ -24,7 +24,7 @@ def parse_opt():
 
     # -------------- 参数值 --------------
     parser.add_argument("--epochs", type=int, default=300, help="total training epochs")
-    parser.add_argument("--batch-size", type=int, default=8, help="total batch size for all GPUs")
+    parser.add_argument("--batch-size", type=int, default=16, help="total batch size for all GPUs")
     parser.add_argument("--image-size", type=list, default=[640, 640], help="train, val image size HxW")
     parser.add_argument("--resume", nargs="?", const=True, default=False, help="resume most recent training")
     parser.add_argument("--device", default="gpu", help="cpu, gpu, tpu, ipu, hpu, mps, auto")
@@ -65,7 +65,7 @@ def setup(opt, hyp):
         device=opt.device,
         nproc_per_node=1,
         accumulate=accumulate,
-        bar_train_title=("box_loss", "dfl_loss", "cls_loss"),
+        bar_train_title=("box_loss", "obj_loss", "cls_loss"),
         bar_val_title=("Images", "Instances", "P", "R", "mAP50", "mAP50-95"),
         callbacks=[warmup_callback]
     )
@@ -82,9 +82,9 @@ def main(opt):
     data = OmegaConf.load(Path(opt.data))
     trainer = setup(opt, hyp)
 
-    # model = YoloV8(num_classes=cfg.nc, phi='n')
+    model = YoloV8(num_classes=cfg.nc, phi='n')
     # model = YoloV7(anchors=cfg.anchors, num_classes=cfg.nc, phi='l')
-    model = YoloV5(anchors=cfg.anchors, num_classes=cfg.nc, phi='n')
+    # model = YoloV5(anchors=cfg.anchors, num_classes=cfg.nc, phi='n')
     # model = YoloV4(anchors=cfg.anchors, num_classes=cfg.nc, phi='n')
 
     model.hyp = hyp

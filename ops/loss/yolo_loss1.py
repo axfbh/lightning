@@ -307,43 +307,42 @@ class YoloLossV5(YoloAnchorBasedLoss):
             for si in range(bs):
                 tb = targets[targets[:, 0] == si] * gain
 
-                if len(tb):
-                    nb, cls, cx, cy, gw, gh = tb.unbind(1)
+                nb, cls, cx, cy, gw, gh = tb.unbind(1)
 
-                    # ----------- 选择目标点 1 格距离内的网格用于辅助预测 -----------
-                    tb = torch.stack([nb - identity,
-                                      cls - identity,
-                                      cx - identity,
-                                      cy - identity,
-                                      cx - x,
-                                      cy - y,
-                                      gw - identity,
-                                      gh - identity],
-                                     -1)
+                # ----------- 选择目标点 1 格距离内的网格用于辅助预测 -----------
+                tb = torch.stack([nb - identity,
+                                  cls - identity,
+                                  cx - identity,
+                                  cy - identity,
+                                  cx - x,
+                                  cy - y,
+                                  gw - identity,
+                                  gh - identity],
+                                 -1)
 
-                    # j：左格左上角
-                    j = tb[0, :, 4] % 1 < 0.5
-                    # k：上格左上角
-                    k = tb[0, :, 5] % 1 < 0.5
-                    # l：右格左上角
-                    l = ~j
-                    # m：下格左上角
-                    m = ~k
-                    j = torch.stack([torch.ones_like(j), j, k, l, m])
-                    tb = tb[j]
-                    j = torch.bitwise_and(0 <= tb[..., 4:6], tb[..., 4:6] < ng[[1, 0]]).all(-1)
-                    tb = tb[j]
+                # j：左格左上角
+                j = tb[0, :, 4] % 1 < 0.5
+                # k：上格左上角
+                k = tb[0, :, 5] % 1 < 0.5
+                # l：右格左上角
+                l = ~j
+                # m：下格左上角
+                m = ~k
+                j = torch.stack([torch.ones_like(j), j, k, l, m])
+                tb = tb[j]
+                j = torch.bitwise_and(0 <= tb[..., 4:6], tb[..., 4:6] < ng[[1, 0]]).all(-1)
+                tb = tb[j]
 
-                    ai = torch.arange(na, device=self.device).view(na, 1).repeat(1, len(tb))
+                ai = torch.arange(na, device=self.device).view(na, 1).repeat(1, len(tb))
 
-                    tb = torch.cat((tb.repeat(na, 1, 1), ai[:, :, None]), 2)
+                tb = torch.cat((tb.repeat(na, 1, 1), ai[:, :, None]), 2)
 
-                    #  ------------ 选择最大的长宽比，删除小于阈值的框 -------------
-                    r = tb[..., 6:8] / anchor[:, None]
-                    j = torch.max(r, 1 / r).max(2)[0] < self.hyp['anchor_t']
-                    tb = tb[j]
+                #  ------------ 选择最大的长宽比，删除小于阈值的框 -------------
+                r = tb[..., 6:8] / anchor[:, None]
+                j = torch.max(r, 1 / r).max(2)[0] < self.hyp['anchor_t']
+                tb = tb[j]
 
-                    t = torch.cat([t, tb], 0)
+                t = torch.cat([t, tb], 0)
 
             # ----------- 分别提取信息，生成 -----------
             b, c = t[:, :2].long().t()

@@ -72,7 +72,7 @@ class SPPCSPC(nn.Module):
         x1 = self.cv1(x)
         x2 = self.cv2(x)
 
-        x1 = self.spp(x1)
+        x1 = torch.cat([x1, self.spp(x1)], 1)
         x1 = self.cv3(x1)
 
         x = torch.cat([x1, x2], dim=1)
