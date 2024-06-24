@@ -173,20 +173,20 @@ class YoloV5Head(nn.Module):
             x[i] = self.head[i](x[i])
             bs, _, ny, nx = x[i].shape  # x(bs,75,20,20) to x(bs,3,20,20,25)
             x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
-            # if not self.training:  # inference
-            #     shape = 1, self.na, ny, nx, 2  # grid shape
-            #
-            #     stride = imgsze / torch.tensor([nx, ny], device=device)
-            #
-            #     grid = make_grid(ny, nx, 1, 1, self.anchors.dtype, device).view((1, 1, ny, nx, 2)).expand(shape)
-            #     anchor_grid = self.anchors[i].view((1, self.na, 1, 1, 2)).expand(shape)
-            #
-            #     xy, wh, conf = x[i].sigmoid().split((2, 2, self.nc + 1), -1)
-            #     xy = (xy * 2 - 0.5 + grid) * stride  # xy
-            #     wh = (wh * 2) ** 2 * anchor_grid  # wh
-            #     y = torch.cat((xy, wh, conf), 4)
-            #
-            #     z.append(y.view(bs, self.na * nx * ny, self.no))
+            if not self.training:  # inference
+                shape = 1, self.na, ny, nx, 2  # grid shape
+
+                stride = imgsze / torch.tensor([nx, ny], device=device)
+
+                grid = make_grid(ny, nx, 1, 1, device).view((1, 1, ny, nx, 2)).expand(shape)
+                anchor_grid = self.anchors[i].view((1, self.na, 1, 1, 2)).expand(shape)
+
+                xy, wh, conf = x[i].sigmoid().split((2, 2, self.nc + 1), -1)
+                xy = (xy * 2 - 0.5 + grid) * stride  # xy
+                wh = (wh * 2) ** 2 * anchor_grid  # wh
+                y = torch.cat((xy, wh, conf), 4)
+
+                z.append(y.view(bs, self.na * nx * ny, self.no))
 
         return x if self.training else (torch.cat(z, 1), x)
 
@@ -228,7 +228,7 @@ class YoloV4Head(nn.Module):
 
                 stride = imgsze / torch.tensor([nx, ny], device=device)
 
-                grid = make_grid(ny, nx, 1, 1, self.anchors.dtype, device).view((1, 1, ny, nx, 2)).expand(shape)
+                grid = make_grid(ny, nx, 1, 1, device).view((1, 1, ny, nx, 2)).expand(shape)
                 anchor_grid = self.anchors[i].view((1, self.na, 1, 1, 2)).expand(shape)
 
                 xy, wh, conf = x[i].split((2, 2, self.nc + 1), -1)
