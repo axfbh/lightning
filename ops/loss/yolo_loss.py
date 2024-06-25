@@ -321,7 +321,7 @@ class YoloLossV5(YoloAnchorBasedLoss):
         gt_labels, gt_cxy, gt_wh = targets.split((1, 2, 2), 2)  # cls, xyxy
         mask_gt = gt_cxy.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
 
-        t_cxys, t_whs, t_scores, t_anchs, t_masks = self.assigner(
+        t_txys, t_whs, t_scores, t_anchs, t_masks = self.assigner(
             self.anchors,
             grids,
             gt_labels,
@@ -331,7 +331,7 @@ class YoloLossV5(YoloAnchorBasedLoss):
             mask_gt
         )
         for i in range(self.nl):
-            target_cxy = t_cxys[i]
+            target_txy = t_txys[i]
             target_wh = t_whs[i]
             target_score = t_scores[i]
             target_anch = t_anchs[i]
@@ -343,10 +343,10 @@ class YoloLossV5(YoloAnchorBasedLoss):
 
             if target_mask.sum() > 1:
                 ps = pred_bboxes[target_mask]
-                pxy = ps[:, :2].sigmoid() * 2 - 0.5
+                pxy = ps[:, :2].sigmoid() * 3 - 1
                 pwh = (ps[:, 2:].sigmoid() * 2) ** 2 * target_anch[target_mask]
                 pbox = torch.cat([pxy, pwh], -1)
-                tbox = torch.cat([target_cxy[target_mask], target_wh[target_mask]], -1)
+                tbox = torch.cat([target_txy[target_mask], target_wh[target_mask]], -1)
                 iou = iou_loss(pbox, tbox, in_fmt='cxcywh', CIoU=True)
 
                 loss[0] += (1.0 - iou).mean()
