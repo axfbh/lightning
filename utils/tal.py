@@ -363,7 +363,7 @@ class TaskNearestAssigner(nn.Module):
         fg_mask = mask_pos.sum(-2)
         # 至少有一个重叠目标
         if fg_mask.max() > 1:
-            mask_multi_gts = (fg_mask.unsqueeze(2) > 1).expand(-1, -1, n_max_boxes, -1)  # (b, n_max_boxes, h*w)
+            mask_multi_gts = (fg_mask.unsqueeze(-2) > 1).expand(-1, -1, n_max_boxes, -1)  # (b, n_max_boxes, h*w)
             max_overlaps_idx = overlaps.argmax(-2)  # (b,na ,h*w)
 
             non_overlaps = torch.ones(mask_pos.shape, dtype=mask_pos.dtype, device=mask_pos.device)
