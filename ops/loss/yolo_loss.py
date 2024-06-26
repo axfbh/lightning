@@ -301,7 +301,7 @@ class YoloLossV5(YoloAnchorBasedLoss):
         z = []
         z1 = []
         for g, s in zip(grid_sizes, strides):
-            z.append(make_grid(g[0], g[1], device=self.device))
+            z.append(make_grid(g[0], g[1], s[0], s[1], device=self.device))
             z1.append(s.expand(len(z[-1]), -1))
         return torch.cat(z, 0), torch.cat(z1, 0)
 

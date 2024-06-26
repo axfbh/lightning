@@ -304,12 +304,12 @@ class TaskNearestAssigner(nn.Module):
         target_label = gt_labels.long().flatten()[target_gt_idx]  # (b, h*w)
 
         target_cxy = gt_cxy.view(-1, gt_cxy.shape[-1])[target_gt_idx]
-        target_txy = (target_cxy / strides) - grid
+        target_txy = target_cxy - grid
         target_wh = gt_wh.view(-1, gt_wh.shape[-1])[target_gt_idx]
 
         target_score = torch.zeros((self.bs, ng, self.num_classes),
                                    dtype=torch.float,
-                                   device=target_label.device)  # (b, h*w, 80)
+                                   device=target_label.device)  # (b, h*w, 20)
         target_score.scatter_(-1, target_label.unsqueeze(-1), 1)
 
         return target_score, target_txy, target_wh / strides
@@ -327,13 +327,13 @@ class TaskNearestAssigner(nn.Module):
 
     def get_box_metrics(self, grids, gt_cxys, strides):
         n_anchors = grids.shape[0]
-        gt_cxys = gt_cxys.unsqueeze(2).expand(-1, -1, n_anchors, -1) / strides
-        distance_deltas = grids + 0.5 - gt_cxys
-        return distance_deltas
+        gt_cxys = gt_cxys.view(-1, 1, 2)
+        distance_deltas = ((grids + strides / 2)[None] - gt_cxys).view(self.bs, self.n_max_boxes, n_anchors, -1)
+        return distance_deltas / strides
 
     def select_topk_candidates(self, metrics, largest=True):
         # 每个 bbox 选取网格内 topk 个正样本
-        topk_metrics, topk_idxs = torch.topk(metrics, self.topk, dim=2, largest=largest)
+        topk_metrics, topk_idxs = torch.topk(metrics, self.topk, dim=-1, largest=largest)
 
         count_tensor = torch.zeros(metrics.shape, dtype=torch.int8, device=metrics.device)
         count_tensor.scatter_(-1, topk_idxs, 1)
@@ -380,7 +380,6 @@ class TaskNearestAssigner(nn.Module):
         self.bs = gt_labels.shape[0]
         self.n_max_boxes = gt_labels.shape[1]
         ng = grids.shape[0]
-        anc_wh = anc_wh / strides
 
         mask_pos, distance_metric = self.get_pos_mask(grids, gt_cxys, strides, mask_gt)
 
@@ -395,8 +394,8 @@ class TaskNearestAssigner(nn.Module):
                                                                target_gt_idx,
                                                                strides,
                                                                ng)
-        r = target_wh / anc_wh
+        r = (target_wh / anc_wh) / strides
         mask_anc = torch.max(r, 1 / r).max(-1)[0] < self.anchor_t
         fg_mask = fg_mask * mask_anc
 
-        return target_score, target_txy, target_wh, anc_wh, fg_mask.bool()
+        return target_score, target_txy / strides, target_wh / strides, anc_wh / strides, fg_mask.bool()
