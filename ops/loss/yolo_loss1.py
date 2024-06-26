@@ -341,7 +341,7 @@ class YoloLossV5(YoloAnchorBasedLoss):
 
             tobj = torch.zeros_like(target_mask, dtype=pred_confs.dtype)
 
-            if target_mask.sum() > 1:
+            if target_mask.sum() > 0:
                 ps = pred_bboxes[target_mask]
                 pxy = ps[:, :2].sigmoid() * 3 - 1
                 pwh = (ps[:, 2:].sigmoid() * 2) ** 2 * target_anch[target_mask]
