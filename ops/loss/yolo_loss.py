@@ -1,12 +1,14 @@
+from abc import abstractmethod
+
 import torch
 import torch.nn as nn
-from abc import abstractmethod
-from utils.boxes import bbox_iou, iou_loss, box_convert, dist2bbox, bbox2dist
+import torch.nn.functional as F
+
 from ops.loss.basic_loss import BasicLoss
 from ops.metric.DetectionMetric import smooth_BCE
 from utils.tal import TaskAlignedAssigner, TaskNearestAssigner
-import torch.nn.functional as F
 from utils.utils import make_grid
+from utils.boxes import bbox_iou, iou_loss, box_convert, dist2bbox, bbox2dist
 
 torch.set_printoptions(precision=4, sci_mode=False)
 
