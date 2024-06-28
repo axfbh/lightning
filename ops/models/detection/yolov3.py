@@ -5,7 +5,7 @@ from ops.models.head.yolo_head import YoloHead
 from ops.models.backbone.utils import _darknet_extractor
 from ops.models.backbone.darknet import DarkNet
 from ops.models.detection.utils import Yolo
-from ops.loss.yolo_loss2 import YoloLossV3
+from ops.loss.yolo_loss1 import YoloLossV3
 
 
 class ConvolutionalLayer(nn.Sequential):
