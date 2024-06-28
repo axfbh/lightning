@@ -396,6 +396,7 @@ class TaskNearestAssigner(nn.Module):
                 return ([0 for _ in range(self.nl)],
                         [0 for _ in range(self.nl)],
                         [0 for _ in range(self.nl)],
+                        [0 for _ in range(self.nl)],
                         [torch.zeros((self.bs, self.na, self.n_max_boxes, ng), dtype=torch.bool,
                                      device=gt_labels.device) for _ in range(self.nl)])
 
