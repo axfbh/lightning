@@ -385,6 +385,14 @@ class TaskNearestAssigner(nn.Module):
 
         ng = grid.shape[0]
 
+        if self.n_max_boxes == 0:
+            return (
+                torch.zeros((self.bs, self.n_max_boxes, ng, 20), device=gt_labels.device),
+                torch.zeros((self.bs, self.n_max_boxes, ng, 4), device=gt_labels.device),
+                anc_wh.view(1, self.na, 1, -1).expand(self.bs, -1, ng, -1),
+                torch.zeros((self.bs, self.n_max_boxes, ng), dtype=torch.bool, device=gt_labels.device),
+            )
+
         mask_pos, distance_metric = self.get_pos_mask(grid, gt_cxys, mask_gt)
 
         target_gt_idx, fg_mask, mask_pos = self.select_highest_overlaps(mask_pos,

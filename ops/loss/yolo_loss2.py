@@ -4,7 +4,7 @@ from abc import abstractmethod
 from utils.boxes import bbox_iou, iou_loss, box_convert, dist2bbox, bbox2dist
 from ops.loss.basic_loss import BasicLoss
 from ops.metric.DetectionMetric import smooth_BCE
-from utils.tal import TaskAlignedAssigner, TaskNearestAssigner
+from utils.tal1 import TaskAlignedAssigner, TaskNearestAssigner
 import torch.nn.functional as F
 from utils.utils import make_grid
 
@@ -312,7 +312,7 @@ class YoloLossV5(YoloAnchorBasedLoss):
         for i in range(self.nl):
             _, ng, _ = torch.as_tensor(feats[i].shape, device=self.device).split(2)
 
-            stride = image_size / ng
+            stride = (image_size / ng)[[1, 0]]
 
             target_box, target_score, anc_wh, fg_mask = self.assigner(
                 self.anchors[i] / stride,
