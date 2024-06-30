@@ -1,14 +1,12 @@
-from abc import abstractmethod
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
+from abc import abstractmethod
+from utils.boxes import bbox_iou, iou_loss, box_convert, dist2bbox, bbox2dist
 from ops.loss.basic_loss import BasicLoss
 from ops.metric.DetectionMetric import smooth_BCE
 from utils.tal import TaskAlignedAssigner, TaskNearestAssigner
+import torch.nn.functional as F
 from utils.utils import make_grid
-from utils.boxes import bbox_iou, iou_loss, box_convert, dist2bbox, bbox2dist
 
 torch.set_printoptions(precision=4, sci_mode=False)
 
@@ -34,8 +32,7 @@ class YoloAnchorBasedLoss(BasicLoss):
 
         # Define criteria
         self.BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([self.hyp['cls_pw']], device=self.device))
-        self.BCEobj = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([self.hyp['obj_pw']], device=self.device),
-                                           reduction='none')
+        self.BCEobj = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([self.hyp['obj_pw']], device=self.device))
 
     @abstractmethod
     def build_targets(self, p, targets, image_size):
@@ -299,72 +296,42 @@ class YoloLossV5(YoloAnchorBasedLoss):
             out[..., 1:5] = out[..., 1:5]
         return out
 
-    def grids_preprocess(self, grid_sizes, strides):
-        z = []
-        z1 = []
-        z2 = []
-        for g, s in zip(grid_sizes, strides):
-            z.append(make_grid(g[0], g[1], device=self.device))
-            z1.append(s.expand(len(z[-1]), -1))
-            z2.append(len(z[-1]))
-        return torch.cat(z, 0), torch.cat(z1, 0), z2
-
-    def anchor_preprocess(self, anchor, grid_sizes):
-        z = []
-        for a, g in zip(anchor, grid_sizes):
-            z.append(a.view(1, -1).expand(g[0] * g[1], -1))
-        return torch.cat(z, 0)
-
-    def balance_preprocess(self, balance, grid_sizes):
-        z = []
-        for b, g in zip(balance, grid_sizes):
-            z.append(torch.full((g[0] * g[1], 1), fill_value=b, device=self.device))
-        return torch.cat(z, 0)
-
     def forward(self, preds, targets, image_size):
         loss = torch.zeros(3, dtype=torch.float32, device=self.device)
-
         feats = preds[1] if isinstance(preds, tuple) else preds
-        preds = torch.cat([
-            xi.view(feats[0].shape[0], self.na, self.no, -1) for xi in feats
-        ], -1).permute(1, 0, 3, 2).contiguous()
-
-        grid_size = torch.stack([torch.tensor(p[0].shape[-2:], device=self.device) for p in feats], 0)
-
-        strides = image_size / grid_size
+        preds = [
+            xi.view(feats[0].shape[0], self.na, -1, self.no).split((4, 1, self.nc), -1) for xi in feats
+        ]
 
         batch_size = feats[0].shape[0]
-        grids, strides, ng = self.grids_preprocess(grid_size, strides)
-        balance = self.balance_preprocess(self.balance, grid_size)
-
-        lss = [[], [], []]
 
         targets = self.targets_preprocess(targets, batch_size)
         gt_labels, gt_cxys, gt_whs = targets.split((1, 2, 2), 2)  # cls, xyxy
         mask_gt = gt_cxys.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
 
-        for i in range(self.na):
-            pred_boxe, pred_obj, pred_score = preds[i].split((4, 1, self.nc), 2)
-            anchor = self.anchor_preprocess(self.anchors[:, i], grid_size)
-            target_score, target_txy, target_wh, anc_wh, fg_mask = self.assigner(
-                anchor,
-                grids,
+        for i in range(self.nl):
+            _, ng, _ = torch.as_tensor(feats[i].shape, device=self.device).split(2)
+
+            stride = (image_size / ng)[[1, 0]]
+
+            target_box, target_score, anc_wh, fg_mask = self.assigner(
+                self.anchors[i] / stride,
+                make_grid(*ng, device=self.device),
                 gt_labels,
-                gt_cxys,
-                gt_whs,
-                strides,
-                ng,
+                gt_cxys / stride,
+                gt_whs / stride,
                 mask_gt
             )
 
+            pred_boxe, pred_obj, pred_score = preds[i]
+
             target_obj = torch.zeros_like(pred_obj)
 
-            if fg_mask.sum() > 1:
+            if fg_mask.any() > 0:
                 pxy = pred_boxe[..., :2].sigmoid() * 3 - 1
                 pwh = (pred_boxe[..., 2:].sigmoid() * 2) ** 2 * anc_wh
-                pbox = torch.cat([pxy, pwh], -1)
-                tbox = torch.cat([target_txy, target_wh], -1)
-                iou = iou_loss(pbox[fg_mask], tbox[fg_mask], in_fmt='cxcywh', CIoU=True)
+                pred_boxe = torch.cat([pxy, pwh], -1)
+                iou = iou_loss(pred_boxe[fg_mask], target_box[fg_mask], in_fmt='cxcywh', CIoU=True)
 
                 loss[0] += (1.0 - iou).mean()
 
@@ -375,14 +342,8 @@ class YoloLossV5(YoloAnchorBasedLoss):
                     loss[2] += self.BCEcls(pred_score[fg_mask], target_score[fg_mask])
 
             obji = self.BCEobj(pred_obj, target_obj)
-            k = 0
-            for e, n in enumerate(ng):
-                lss[e].append(obji[:, k:n + k])
-                k += n
+            loss[1] += obji * self.balance[i]  # obj loss
 
-        loss[1] = (torch.mean(torch.cat(lss[0])) * self.balance[0] +
-                   torch.mean(torch.cat(lss[1])) * self.balance[1] +
-                   torch.mean(torch.cat(lss[2])) * self.balance[2])
         loss[0] *= self.hyp["box"]
         loss[1] *= self.hyp["obj"]
         loss[2] *= self.hyp["cls"]
