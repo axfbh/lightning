@@ -323,6 +323,7 @@ class YoloLossV5(YoloAnchorBasedLoss):
 
     def forward(self, preds, targets, image_size):
         loss = torch.zeros(3, dtype=torch.float32, device=self.device)
+
         feats = preds[1] if isinstance(preds, tuple) else preds
         preds = torch.cat([
             xi.view(feats[0].shape[0], self.na, self.no, -1) for xi in feats
@@ -336,12 +337,14 @@ class YoloLossV5(YoloAnchorBasedLoss):
         grids, strides, ng = self.grids_preprocess(grid_size, strides)
         balance = self.balance_preprocess(self.balance, grid_size)
 
+        lss = [[], [], []]
+
         targets = self.targets_preprocess(targets, batch_size)
         gt_labels, gt_cxys, gt_whs = targets.split((1, 2, 2), 2)  # cls, xyxy
         mask_gt = gt_cxys.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
 
         for i in range(self.na):
-            pred_boxe, pred_conf, pred_score = preds[i].split((4, 1, self.nc), 2)
+            pred_boxe, pred_obj, pred_score = preds[i].split((4, 1, self.nc), 2)
             anchor = self.anchor_preprocess(self.anchors[:, i], grid_size)
             target_score, target_txy, target_wh, anc_wh, fg_mask = self.assigner(
                 anchor,
@@ -354,9 +357,9 @@ class YoloLossV5(YoloAnchorBasedLoss):
                 mask_gt
             )
 
-            tobj = torch.zeros_like(pred_conf)
+            target_obj = torch.zeros_like(pred_obj)
 
-            if fg_mask.any() > 0:
+            if fg_mask.sum() > 1:
                 pxy = pred_boxe[..., :2].sigmoid() * 3 - 1
                 pwh = (pred_boxe[..., 2:].sigmoid() * 2) ** 2 * anc_wh
                 pbox = torch.cat([pxy, pwh], -1)
@@ -365,15 +368,21 @@ class YoloLossV5(YoloAnchorBasedLoss):
 
                 loss[0] += (1.0 - iou).mean()
 
-                iou = iou.detach().clamp(0).type(tobj.dtype)
-                tobj[fg_mask] = iou[:, None]  # iou ratio
+                iou = iou.detach().clamp(0).type(target_obj.dtype)
+                target_obj[fg_mask] = iou[:, None]  # iou ratio
 
                 if self.nc > 1:
                     loss[2] += self.BCEcls(pred_score[fg_mask], target_score[fg_mask])
 
-            obji = self.BCEobj(pred_conf, tobj)
-            loss[1] += (obji * balance).mean()
+            obji = self.BCEobj(pred_obj, target_obj)
+            k = 0
+            for e, n in enumerate(ng):
+                lss[e].append(obji[:, k:n + k])
+                k += n
 
+        loss[1] = (torch.mean(torch.cat(lss[0])) * self.balance[0] +
+                   torch.mean(torch.cat(lss[1])) * self.balance[1] +
+                   torch.mean(torch.cat(lss[2])) * self.balance[2])
         loss[0] *= self.hyp["box"]
         loss[1] *= self.hyp["obj"]
         loss[2] *= self.hyp["cls"]

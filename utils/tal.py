@@ -389,11 +389,11 @@ class TaskNearestAssigner(nn.Module):
 
         if self.n_max_boxes == 0:
             return (
-                torch.zeros((self.bs, self.n_max_boxes, ng, 20), device=gt_labels.device),
-                torch.zeros((self.bs, self.n_max_boxes, ng, 2), device=gt_labels.device),
-                torch.zeros((self.bs, self.n_max_boxes, ng, 2), device=gt_labels.device),
+                torch.zeros((self.bs, ng, 20), device=gt_labels.device),
+                torch.zeros((self.bs, ng, 2), device=gt_labels.device),
+                torch.zeros((self.bs, ng, 2), device=gt_labels.device),
                 anc_wh,
-                torch.zeros((self.bs, self.n_max_boxes, ng), dtype=torch.bool, device=gt_labels.device),
+                torch.zeros((self.bs, ng), dtype=torch.bool, device=gt_labels.device),
             )
 
         mask_pos, distance_metric = self.get_pos_mask(grids, gt_cxys, strides, ngs, mask_gt)
