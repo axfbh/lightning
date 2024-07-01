@@ -91,4 +91,4 @@ class YoloV5(Yolo):
         return self.head([P3, P4, P5], H, W)
 
     def on_fit_start(self) -> None:
-        self.compute_loss = YoloLossV5(self,3)
+        self.compute_loss = YoloLossV5(self, 3)

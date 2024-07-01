@@ -31,9 +31,7 @@ class YoloAnchorBasedLoss(BasicLoss):
         self.alpha = [0, 2, 3][ids]
         self.gamma = [0, 0.5, 1][ids]
 
-        self.assigner = TaskNearestAssigner(anchor_t=self.hyp['anchor_t'],
-                                            topk=topk,
-                                            num_classes=self.nc)
+        self.assigner = TaskNearestAssigner(anchor_t=self.hyp['anchor_t'], topk=topk, num_classes=self.nc)
 
         self.balance = [4.0, 1.0, 0.4]
 
@@ -220,15 +218,15 @@ class YoloLossV4To7(YoloAnchorBasedLoss):
                 mask_gt
             )
 
-            pred_boxe, pred_obj, pred_score = preds[i]
+            pred_box, pred_obj, pred_score = preds[i]
 
             target_obj = torch.zeros_like(pred_obj)
 
             if fg_mask.any() > 0:
-                pxy = pred_boxe[..., :2].sigmoid() * self.alpha - self.gamma
-                pwh = (pred_boxe[..., 2:].sigmoid() * 2) ** 2 * anc_wh
-                pred_boxe = torch.cat([pxy, pwh], -1)
-                iou = iou_loss(pred_boxe[fg_mask], target_box[fg_mask], in_fmt='cxcywh', CIoU=True)
+                pxy = pred_box[..., :2].sigmoid() * self.alpha - self.gamma
+                pwh = (pred_box[..., 2:].sigmoid() * 2) ** 2 * anc_wh
+                pred_box = torch.cat([pxy, pwh], -1)
+                iou = iou_loss(pred_box[fg_mask], target_box[fg_mask], in_fmt='cxcywh', CIoU=True)
 
                 loss[0] += (1.0 - iou).mean()
 
