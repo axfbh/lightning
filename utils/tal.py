@@ -299,7 +299,8 @@ class TaskNearestAssigner(nn.Module):
         self.topk = topk
         self.anchor_t = anchor_t
 
-    def get_targets(self, gt_labels, gt_cxys, gt_whs, grid, target_gt_idx, ng):
+    def get_targets(self, gt_labels, gt_cxys, gt_whs, grid, target_gt_idx):
+        ng = grid.shape[0]
         batch_ind = torch.arange(end=self.bs, dtype=torch.int64, device=gt_labels.device)[..., None, None]
         target_gt_idx = target_gt_idx + batch_ind * self.n_max_boxes  # (b, h*w)
         target_labels = gt_labels.long().flatten()[target_gt_idx]  # (b, h*w)
@@ -381,11 +382,11 @@ class TaskNearestAssigner(nn.Module):
         self.bs = gt_labels.shape[0]
         self.n_max_boxes = gt_labels.shape[1]
 
-        ng = grid.shape[0]
-
         if self.n_max_boxes == 0:
             return (
-                None, None, None,
+                None,
+                None,
+                None,
                 torch.zeros(1, dtype=torch.bool, device=gt_labels.device),
             )
 
@@ -399,8 +400,7 @@ class TaskNearestAssigner(nn.Module):
                                                                gt_cxys,
                                                                gt_whs,
                                                                grid,
-                                                               target_gt_idx.unsqueeze(1).expand(-1, self.na, -1),
-                                                               ng)
+                                                               target_gt_idx.unsqueeze(1).expand(-1, self.na, -1))
         anc_wh = anc_wh.view(1, self.na, 1, -1)
         r = target_wh / anc_wh
         mask_anc = torch.max(r, 1 / r).max(-1)[0] < self.anchor_t
