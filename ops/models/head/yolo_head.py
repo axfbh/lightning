@@ -174,8 +174,6 @@ class YoloV5Head(nn.Module):
             bs, _, ny, nx = x[i].shape  # x(bs,75,20,20) to x(bs,3,20,20,25)
             x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
             if not self.training:  # inference
-                # ps = x[i].permute(0, 1, 3, 4, 2).contiguous()
-
                 shape = 1, self.na, ny, nx, 2  # grid shape
 
                 stride = imgsze / torch.tensor([nx, ny], device=device)
@@ -184,7 +182,7 @@ class YoloV5Head(nn.Module):
                 anchor_grid = self.anchors[i].view((1, self.na, 1, 1, 2)).expand(shape)
 
                 xy, wh, conf = x[i].sigmoid().split((2, 2, self.nc + 1), -1)
-                xy = (xy * 3 - 1 + grid) * stride  # xy
+                xy = (xy * 2 - 0.5 + grid) * stride  # xy
                 wh = (wh * 2) ** 2 * anchor_grid  # wh
                 y = torch.cat((xy, wh, conf), 4)
 

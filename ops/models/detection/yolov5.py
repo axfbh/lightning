@@ -7,7 +7,7 @@ from ops.models.backbone.utils import _cspdarknet_extractor
 from ops.models.head.yolo_head import YoloV5Head
 from ops.models.detection.utils import Yolo
 # from ops.loss.yolo_loss1 import YoloLossV5
-from ops.loss.yolo_loss import YoloLossV5
+from ops.loss.yolo_loss import YoloLossV4To7 as YoloLossV5
 
 
 class YoloV5(Yolo):
@@ -91,4 +91,4 @@ class YoloV5(Yolo):
         return self.head([P3, P4, P5], H, W)
 
     def on_fit_start(self) -> None:
-        self.compute_loss = YoloLossV5(self)
+        self.compute_loss = YoloLossV5(self,3)
