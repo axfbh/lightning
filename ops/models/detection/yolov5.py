@@ -6,7 +6,6 @@ from ops.models.backbone.cspdarknet import CSPDarknetV5, CBM, C3
 from ops.models.backbone.utils import _cspdarknet_extractor
 from ops.models.head.yolo_head import YoloV5Head
 from ops.models.detection.utils import Yolo
-# from ops.loss.yolo_loss1 import YoloLossV5
 from ops.loss.yolo_loss import YoloLossV4To7 as YoloLossV5
 
 
