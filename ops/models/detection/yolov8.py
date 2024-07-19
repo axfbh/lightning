@@ -99,7 +99,3 @@ class YoloV8(Yolo):
 
     def on_fit_start(self) -> None:
         self.compute_loss = YoloLossV8(self)
-
-    def configure_model(self) -> None:
-        self.box_map_metric = MeanAveragePrecision(device=self.device, background=False)
-
