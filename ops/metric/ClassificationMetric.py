@@ -27,7 +27,9 @@ class ClassificationMetric:
             self.info_matrix[key] += weighted_avg[key]
 
     def reset(self):
-        self.info_matrix = np.zeros(3)
+        self.info_matrix = {'precision': 0,
+                            'recall': 0,
+                            'f1-score': 0}
         self.num = 0
 
     def precision_score(self):
