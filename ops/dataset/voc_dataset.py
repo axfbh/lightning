@@ -49,7 +49,7 @@ def voc_image_mask_paths(root_dir, image_set):
     return image_path, anno_path
 
 
-def voc_bboxes_labels_from_xml(path, idx: int, cate: str = None, name2id: Dict = None) -> Dict:
+def voc_bboxes_labels_from_xml(path, cate: str = None, name2id: Dict = None) -> Dict:
     anno = ET.parse(path).getroot()
     bboxes = []
     classes = []

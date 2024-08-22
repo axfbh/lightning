@@ -61,8 +61,8 @@ class DataCache:
     def _set_cache(self, anno_paths, read_fn, *args):
         self.annotations = []
 
-        for i, anno in enumerate(anno_paths):
-            self.annotations.append(read_fn(anno, i, *args))
+        for anno in anno_paths:
+            self.annotations.append(read_fn(anno, *args))
 
     def __getitem__(self, item):
         anno = self.annotations[item]
