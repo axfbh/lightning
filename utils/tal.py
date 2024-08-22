@@ -299,23 +299,6 @@ class TaskNearestAssigner(nn.Module):
         self.topk = topk
         self.anchor_t = anchor_t
 
-    def get_targets(self, gt_labels, gt_cxys, gt_whs, grid, target_gt_idx):
-        ng = grid.shape[0]
-        batch_ind = torch.arange(end=self.bs, dtype=torch.int64, device=gt_labels.device)[..., None, None]
-        target_gt_idx = target_gt_idx + batch_ind * self.n_max_boxes  # (b, h*w)
-        target_labels = gt_labels.long().flatten()[target_gt_idx]  # (b, h*w)
-
-        target_cxys = gt_cxys.view(-1, gt_cxys.shape[-1])[target_gt_idx]
-        target_txys = target_cxys - grid
-        target_whs = gt_whs.view(-1, gt_whs.shape[-1])[target_gt_idx]
-
-        target_scores = torch.zeros((self.bs, self.na, ng, self.num_classes),
-                                    dtype=torch.float,
-                                    device=target_labels.device)  # (b, h*w, 80)
-        target_scores.scatter_(-1, target_labels.unsqueeze(-1), 1)
-
-        return target_scores, target_txys, target_whs
-
     def get_pos_mask(self, grid, gt_cxys, mask_gt):
         distance_deltas = self.get_box_metrics(grid, gt_cxys)
 
@@ -409,3 +392,20 @@ class TaskNearestAssigner(nn.Module):
         target_box = torch.cat([target_txy, target_wh], -1)
 
         return target_box, target_score, anc_wh, fg_mask.bool()
+
+    def get_targets(self, gt_labels, gt_cxys, gt_whs, grid, target_gt_idx):
+        ng = grid.shape[0]
+        batch_ind = torch.arange(end=self.bs, dtype=torch.int64, device=gt_labels.device)[..., None, None]
+        target_gt_idx = target_gt_idx + batch_ind * self.n_max_boxes  # (b, h*w)
+        target_labels = gt_labels.long().flatten()[target_gt_idx]  # (b, h*w)
+
+        target_cxys = gt_cxys.view(-1, gt_cxys.shape[-1])[target_gt_idx]
+        target_txys = target_cxys - grid
+        target_whs = gt_whs.view(-1, gt_whs.shape[-1])[target_gt_idx]
+
+        target_scores = torch.zeros((self.bs, self.na, ng, self.num_classes),
+                                    dtype=torch.float,
+                                    device=target_labels.device)  # (b, h*w, 80)
+        target_scores.scatter_(-1, target_labels.unsqueeze(-1), 1)
+
+        return target_scores, target_txys, target_whs
