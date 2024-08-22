@@ -83,7 +83,7 @@ def create_dataloader(path,
                       shuffle=False,
                       persistent_workers=False):
     image_paths, mask_paths = voc_image_mask_paths(path, image_set)
-    cache = DataCache(image_paths, mask_paths, voc_mask_label_from_image, names)
+    cache = DataCache(image_paths, mask_paths, voc_mask_label_from_image)
 
     aug_mosaic = Mosaic(
         reference_data=cache,
