@@ -33,6 +33,8 @@ class LiteSeg(LightningModule):
         self.upsample_4x = nn.Upsample(scale_factor=8, mode='bilinear', align_corners=True)
         self.upsample_2x = nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True)
 
+        self.compute_loss = nn.CrossEntropyLoss(ignore_index=255)
+
     def forward(self, x):
         feat = self.backbone(x)
 
@@ -106,6 +108,3 @@ class LiteSeg(LightningModule):
         self.ema_model = ModelEMA(self)
 
         return [optimizer], [scheduler]
-
-    def on_fit_start(self) -> None:
-        self.compute_loss = nn.CrossEntropyLoss(ignore_index=255)
