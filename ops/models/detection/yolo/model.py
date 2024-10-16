@@ -64,6 +64,7 @@ class Yolo:
             node_rank: str = "0",
             num_nodes=1,
             resume=None):
+
         hyp = OmegaConf.load('./data/hyp/hyp-yolo-low.yaml' if hyp is None else hyp)
         rank_zero_info(colorstr("hyperparameters: ") + ", ".join(f"{k}={v}" for k, v in hyp.items()))
 
@@ -98,8 +99,8 @@ class Yolo:
         model = self.model(**params)
 
         ddp = 'auto'
-        bar_train_title = ("box_loss", "obj_loss", "cls_loss"),
-        bar_val_title = ("Images", "Instances", "P", "R", "mAP50", "mAP50-95"),
+        bar_train_title = ("box_loss", "obj_loss", "cls_loss")
+        bar_val_title = ("Images", "Instances", "P", "R", "mAP50", "mAP50-95")
         accelerator = device if device in ["cpu", "tpu", "ipu", "hpu", "mps"] else 'gpu'
 
         # ---------- batch size 参数 ----------

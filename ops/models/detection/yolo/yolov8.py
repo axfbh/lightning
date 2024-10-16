@@ -5,11 +5,13 @@ import math
 from ops.models.backbone.cspdarknet import CSPDarknetV8, CBM, C2f
 from ops.models.backbone.utils import _cspdarknet_extractor
 from ops.models.head.yolo_head import YoloV8Head
+from ops.models.detection.yolo.utils import YoloModel
+from ops.loss.yolo_loss import YoloLossV8
 
 
-class YoloV8(nn.Module):
-    def __init__(self, num_classes, phi):
-        super(YoloV8, self).__init__()
+class YoloV8(YoloModel):
+    def __init__(self, num_classes, phi, *args, **kwargs):
+        super(YoloV8, self).__init__(*args, **kwargs)
 
         width_multiple = {'n': 0.25, 's': 0.50, 'm': 0.75, 'l': 1.0, 'x': 1.25}[phi]
         depth_multiple = {'n': 0.33, 's': 0.33, 'm': 0.67, 'l': 1.0, 'x': 1.0}[phi]
@@ -93,3 +95,6 @@ class YoloV8(nn.Module):
         # ---------------------------------------------------#
 
         return self.head([P3, P4, P5], H, W)
+
+    def on_fit_start(self) -> None:
+        self.compute_loss = YoloLossV8(self)

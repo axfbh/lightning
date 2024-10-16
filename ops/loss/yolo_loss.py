@@ -44,7 +44,7 @@ class YoloAnchorBasedLoss(nn.Module):
 
 class YoloAnchorFreeLoss(nn.Module):
     def __init__(self, model):
-        super(YoloAnchorFreeLoss, self).__init__(model)
+        super(YoloAnchorFreeLoss, self).__init__()
 
         self.hyp = model.hyp
         m = model.head
