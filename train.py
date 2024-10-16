@@ -28,7 +28,7 @@ def parse_opt():
                         help="scheduler")
     parser.add_argument("--sync-bn", action="store_true", help="use SyncBatchNorm, only available in DDP mode")
     parser.add_argument("--workers", type=int, default=2, help="max dataloader workers (per RANK in DDP mode)")
-    parser.add_argument("--project", default="./runs", help="save to project/name")
+    parser.add_argument("--project", default="runs", help="save to project/name")
     parser.add_argument("--name", default="train", help="save to project/name")
     parser.add_argument("--local_rank", type=int, default=-1, help="Automatic DDP Multi-GPU argument, do not modify")
     opt = parser.parse_args()
