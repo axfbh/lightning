@@ -54,10 +54,9 @@ class Yolo:
             imgsz=None,
             batch=None,
             workers=None,
-            optimizer=None,
-            sche=None,
+            optimizer='SGD',
             weight=None,
-            device: Union[List[int], str, int] = None,
+            device: Union[List[int], str, int] = 1,
             project='runs',
             name='train',
             master_addr: str = extract_ip(),
@@ -95,8 +94,7 @@ class Yolo:
         params.update({'hyp': hyp,
                        'imgsz': imgsz,
                        'batch': batch,
-                       'optim': optimizer,
-                       'sche': sche})
+                       'optim': optimizer})
         model = self.model(**params)
 
         ddp = 'auto'

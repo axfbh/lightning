@@ -1,20 +1,20 @@
 from typing import Any
 from omegaconf import OmegaConf
-
+import torch
 from lightning import LightningModule
 
 from ops.metric.DetectionMetric import MeanAveragePrecision
 from ops.utils.torch_utils import ModelEMA, smart_optimizer, smart_scheduler
 from utils.nms import non_max_suppression
+from ops.utils.torch_utils import one_linear
 
 
 class YoloModel(LightningModule):
 
-    def __init__(self, hyp, *, imgsz, batch, optim, sche):
+    def __init__(self, hyp, *, imgsz, batch, optim):
         super(YoloModel, self).__init__()
         self.imgsz = imgsz
         self.batch = batch
-        self.sche = sche
         self.optim = optim
 
         self.hyp = hyp
@@ -79,7 +79,7 @@ class YoloModel(LightningModule):
             self.box_map_metric.reset()
 
     def configure_model(self) -> None:
-        m = self.model.head  # detection head models
+        m = self.head  # detection head models
         nl = m.nl  # number of detection layers (to scale hyp)
         nc = m.nc
         self.hyp["box"] *= 3 / nl  # scale to layers
@@ -96,13 +96,11 @@ class YoloModel(LightningModule):
                                     self.hyp['momentum'],
                                     self.hyp['weight_decay'])
 
-        scheduler = smart_scheduler(
-            optimizer,
-            self.sche,
-            self.current_epoch - 1,
-            lrf=self.hyp['lrf'],
-            max_epochs=self.trainer.max_epochs
-        )
+        fn = one_linear(lrf=self.hyp['lrf'], max_epochs=self.trainer.max_epochs)
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer,
+                                                      last_epoch=self.current_epoch - 1,
+                                                      lr_lambda=fn)
 
         self.ema_model = ModelEMA(self)
 

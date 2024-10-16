@@ -18,12 +18,13 @@ class YoloAnchorBasedLoss(nn.Module):
         super(YoloAnchorBasedLoss, self).__init__()
 
         self.hyp = model.hyp
-        m = model.model.head
+        m = model.head
+        self.device = model.device
 
         self.cp, self.cn = smooth_BCE(eps=self.hyp.get('label_smoothing', 0.0))
 
         # yolo 小grid大anchor，大grid小anchor
-        self.register_buffer("anchors", m.anchors)
+        self.anchors = m.anchors
         self.nl = m.nl
         self.na = m.na
         self.nc = m.nc
@@ -37,8 +38,8 @@ class YoloAnchorBasedLoss(nn.Module):
         self.balance = [4.0, 1.0, 0.4]
 
         # Define criteria
-        self.BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([self.hyp['cls_pw']]))
-        self.BCEobj = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([self.hyp['obj_pw']]))
+        self.BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([self.hyp['cls_pw']], device=model.device))
+        self.BCEobj = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([self.hyp['obj_pw']], device=model.device))
 
 
 class YoloAnchorFreeLoss(nn.Module):
@@ -47,6 +48,7 @@ class YoloAnchorFreeLoss(nn.Module):
 
         self.hyp = model.hyp
         m = model.head
+        self.device = model.device
 
         self.make_anchors = m.make_anchors
         self.nl = m.nl
@@ -194,8 +196,6 @@ class YoloLossV4To7(YoloAnchorBasedLoss):
         return out
 
     def forward(self, preds, targets, imgsz):
-        self.device = imgsz.device
-
         loss = torch.zeros(3, dtype=torch.float32, device=self.device)
         feats = preds[1] if isinstance(preds, tuple) else preds
         preds = [
@@ -277,7 +277,6 @@ class YoloLossV8(YoloAnchorFreeLoss):
         return out
 
     def forward(self, preds, targets, imgsz):
-        self.device = imgsz.deivce
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
         feats = preds[1] if isinstance(preds, tuple) else preds
         pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
