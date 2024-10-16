@@ -63,9 +63,12 @@ class Yolo:
               node_rank: str = "0",
               num_nodes=1,
               resume=False):
-        hyp = OmegaConf.load('./data/hyp/hyp-yolo-low.yaml' if hyp is None else hyp)
+        # ------------ hyp-parameter ------------
+        hyp = './data/hyp/hyp-yolo-low.yaml' if hyp is None else hyp
+        hyp = OmegaConf.load(hyp)
         rank_zero_info(colorstr("hyperparameters: ") + ", ".join(f"{k}={v}" for k, v in hyp.items()))
 
+        # ------------- data -------------
         data = OmegaConf.load(data)
 
         train_dataloader = create_dataloader(data.train,
@@ -93,7 +96,6 @@ class Yolo:
         params.update({
             'hyp': hyp,
             'imgsz': imgsz,
-            'batch': batch,
             'optim': optimizer
         })
         model = self.model(**params)
@@ -104,12 +106,12 @@ class Yolo:
         bar_val_title = ("Images", "Instances", "P", "R", "mAP50", "mAP50-95")
 
         # ---------- batch size 参数 ----------
-        batch_size = batch
-        nbs = 64  # nominal batch size
-        accumulate = max(round(nbs / batch_size), 1)
-        hyp["weight_decay"] *= batch_size * accumulate / nbs
+        # batch_size = batch
+        # nbs = 64  # nominal batch size
+        # accumulate = max(round(nbs / batch_size), 1)
+        # hyp["weight_decay"] *= batch_size * accumulate / nbs
 
-        warmup_callback = WarmupLR(nbs=nbs,
+        warmup_callback = WarmupLR(nbs=64,
                                    momentum=hyp['momentum'],
                                    warmup_bias_lr=hyp['warmup_bias_lr'],
                                    warmup_epoch=hyp["warmup_epoch"],
@@ -134,7 +136,7 @@ class Yolo:
             logger=TensorBoardLogger(save_dir=f'./{project}', name=name),
             strategy=auto_distribute(num_nodes, device, master_addr, master_port, node_rank),
             max_epochs=epochs,
-            accumulate_grad_batches=accumulate,
+            # accumulate_grad_batches=accumulate,
             gradient_clip_val=10,
             gradient_clip_algorithm="norm",
             num_sanity_val_steps=1,

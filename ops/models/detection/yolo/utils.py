@@ -11,10 +11,9 @@ from ops.utils.torch_utils import one_linear
 
 class YoloModel(LightningModule):
 
-    def __init__(self, hyp, *, imgsz, batch, optim):
+    def __init__(self, hyp, *, imgsz, optim):
         super(YoloModel, self).__init__()
         self.imgsz = imgsz
-        self.batch = batch
         self.optim = optim
 
         self.hyp = hyp
@@ -86,8 +85,15 @@ class YoloModel(LightningModule):
         self.hyp["cls"] *= nc / 80 * 3 / nl  # scale to classes and layers
         self.hyp["obj"] *= (max(self.imgsz[0],
                                 self.imgsz[1]) / 640) ** 2 * 3 / nl  # scale to image size and layers
+        batch_size = self.trainer.num_training_batches
+        nbs = 64  # nominal batch size
+        accumulate = max(round(nbs / batch_size), 1)
+        self.hyp["weight_decay"] *= batch_size * accumulate / nbs
 
         self.box_map_metric = MeanAveragePrecision(device=self.device, background=False)
+
+    def setup(self, stage: str) -> None:
+        pass
 
     def configure_optimizers(self):
         optimizer = smart_optimizer(self,

@@ -36,7 +36,6 @@ def parse_opt():
 
 def main(opt):
     model = Yolo(opt.cfg)
-
     model.train(data=opt.data, imgsz=opt.imgsz, batch=opt.batch, workers=opt.workers)
 
 
