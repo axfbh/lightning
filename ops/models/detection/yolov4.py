@@ -4,8 +4,6 @@ from ops.models.backbone.cspdarknet import CSPDarknetV4, CBM
 from ops.models.backbone.utils import _cspdarknet_extractor
 from ops.models.head.yolo_head import YoloV4Head
 from ops.models.neck.spp import SPP
-from ops.models.detection.utils import Yolo
-from ops.loss.yolo_loss import YoloLossV4To7 as YoloLossV4
 
 
 class Upsample(nn.Module):
@@ -42,7 +40,7 @@ def make_three_conv(filters_list, in_filters):
     return m
 
 
-class YoloV4(Yolo):
+class YoloV4(nn.Module):
     def __init__(self, anchors, num_classes, phi):
         super(YoloV4, self).__init__()
 
@@ -105,6 +103,3 @@ class YoloV4(Yolo):
         P5 = self.make_five_conv4(P5)
 
         return self.head([P3, P4, P5], H, W)
-
-    def on_fit_start(self) -> None:
-        self.compute_loss = YoloLossV4(self, 1)

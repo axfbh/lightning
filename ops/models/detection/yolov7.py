@@ -8,11 +8,9 @@ from ops.models.neck.spp import SPPCSPC
 from ops.models.head.yolo_head import YoloV7Head
 from ops.models.backbone.elandarknet import ElanDarkNet, CBS, MP1, Elan
 from ops.models.backbone.utils import _elandarknet_extractor
-from ops.models.detection.utils import Yolo
-from ops.loss.yolo_loss import YoloLossV4To7 as YoloLossV7
 
 
-class YoloV7(Yolo):
+class YoloV7(nn.Module):
     def __init__(self, anchors: List, num_classes: int, phi: str):
         super(YoloV7, self).__init__()
 
@@ -87,6 +85,3 @@ class YoloV7(Yolo):
         P5 = self.rep_conv_3(P5)
 
         return self.head([P3, P4, P5], H, W)
-
-    def on_fit_start(self) -> None:
-        self.compute_loss = YoloLossV7(self, 5)

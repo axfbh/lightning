@@ -7,7 +7,7 @@ class BasicLoss:
     def __init__(self, model):
         super(BasicLoss, self).__init__()
         self.device = model.device
-        self.hyp = model.hyp
+
 
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)

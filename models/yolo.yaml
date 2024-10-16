@@ -1,7 +1,12 @@
 # YOLOv7 🚀 by Ultralytics, AGPL-3.0 license
 
 # Parameters
+model: yolov5
+
+phi: n
+
 nc: 20  # number of classes
+
 anchors:
   - [ 10,13, 16,30, 33,23 ]  # P3/8
   - [ 30,61, 62,45, 59,119 ]  # P4/16

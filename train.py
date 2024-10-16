@@ -1,14 +1,10 @@
 import argparse
-from pathlib import Path
 from omegaconf import OmegaConf
 
-from dataloader import create_dataloader
-
-from ops.models.detection import YoloV5, YoloV4, YoloV7, YoloV8
 from ops.utils.logging import print_args, colorstr
 from ops.utils.callbacks import WarmupLR
 from ops.utils.trainer import Trainer
-
+from ops.models.detection.utils import Yolo
 from lightning.fabric.utilities.rank_zero import rank_zero_info
 
 
@@ -24,8 +20,8 @@ def parse_opt():
 
     # -------------- 参数值 --------------
     parser.add_argument("--epochs", type=int, default=300, help="total training epochs")
-    parser.add_argument("--batch-size", type=int, default=16, help="total batch size for all GPUs")
-    parser.add_argument("--image-size", type=list, default=[640, 640], help="train, val image size HxW")
+    parser.add_argument("--batch", type=int, default=5, help="total batch size for all GPUs")
+    parser.add_argument("--imgsz", type=list, default=[640, 640], help="train, val image size HxW")
     parser.add_argument("--resume", nargs="?", const=True, default=False, help="resume most recent training")
     parser.add_argument("--device", default="gpu", help="cpu, gpu, tpu, ipu, hpu, mps, auto")
     parser.add_argument("--single-cls", action="store_true", help="train multi-class data as single-class")
@@ -39,15 +35,16 @@ def parse_opt():
     parser.add_argument("--workers", type=int, default=2, help="max dataloader workers (per RANK in DDP mode)")
     parser.add_argument("--project", default="./runs", help="save to project/name")
     parser.add_argument("--name", default="train", help="save to project/name")
-    parser.add_argument("--label-smoothing", type=float, default=0.0, help="Label smoothing epsilon")
     parser.add_argument("--local_rank", type=int, default=-1, help="Automatic DDP Multi-GPU argument, do not modify")
 
     return parser.parse_args()
 
 
-def setup(opt, hyp):
+def setup(opt):
+    hyp = OmegaConf.load(opt.hyp)
+
     # ---------- batch size 参数 ----------
-    batch_size = opt.batch_size
+    batch_size = opt.batch
     nbs = 64  # nominal batch size
     accumulate = max(round(nbs / batch_size), 1)
     hyp["weight_decay"] *= batch_size * accumulate / nbs
@@ -77,47 +74,18 @@ def setup(opt, hyp):
 
 
 def main(opt):
-    hyp = OmegaConf.load(Path(opt.hyp))
-    cfg = OmegaConf.load(Path(opt.cfg))
-    data = OmegaConf.load(Path(opt.data))
-    trainer = setup(opt, hyp)
+    trainer = setup(opt)
 
-    # model = YoloV8(num_classes=cfg.nc, phi='n')
-    # model = YoloV7(anchors=cfg.anchors, num_classes=cfg.nc, phi='l')
-    model = YoloV5(anchors=cfg.anchors, num_classes=cfg.nc, phi='n')
-    # model = YoloV4(anchors=cfg.anchors, num_classes=cfg.nc, phi='n')
+    model = Yolo(opt.cfg,
+                 opt.hyp,
+                 opt.data,
+                 imgsz=opt.imgsz,
+                 batch=opt.batch,
+                 workers=opt.workers,
+                 optim=opt.optimizer,
+                 sche=opt.scheduler)
 
-    model.hyp = hyp
-    model.opt = opt
-
-    model.save_hyperparameters(dict(vars(opt), **hyp))
-
-    train_loader = create_dataloader(Path(data.train),
-                                     opt.image_size,
-                                     opt.batch_size,
-                                     data.names,
-                                     hyp=hyp,
-                                     image_set='car_train',
-                                     augment=True,
-                                     workers=opt.workers,
-                                     shuffle=True,
-                                     persistent_workers=True)
-
-    val_loader = create_dataloader(Path(data.val),
-                                   opt.image_size,
-                                   opt.batch_size * 2,
-                                   data.names,
-                                   hyp=hyp,
-                                   image_set='car_val',
-                                   augment=False,
-                                   workers=opt.workers,
-                                   shuffle=False,
-                                   persistent_workers=True)
-
-    trainer.fit(model=model,
-                train_dataloaders=train_loader,
-                val_dataloaders=val_loader,
-                ckpt_path=opt.weights if opt.resume else None)
+    trainer.fit(model=model, ckpt_path=opt.weights if opt.resume else None)
 
 
 if __name__ == '__main__':

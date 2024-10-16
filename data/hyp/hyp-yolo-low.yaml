@@ -23,6 +23,7 @@ mosaic: 1.0
 # ---------- loss 参数 ----------
 cls_pw: 1.0
 obj_pw: 1.0
+label_smoothing: 0.0
 
 # yolo v5-v7
 anchor_t: 4.0

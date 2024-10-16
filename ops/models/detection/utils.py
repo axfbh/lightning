@@ -1,15 +1,81 @@
-from typing import Any, Union, Sequence
-import math
-import numpy as np
-import torch
-from torch import Tensor
+from typing import Any
+
+from omegaconf import OmegaConf
+
+from lightning import LightningModule
+
 from ops.metric.DetectionMetric import MeanAveragePrecision
 from ops.utils.torch_utils import ModelEMA, smart_optimizer, smart_scheduler
+from ops.models.detection import YoloV5, YoloV4, YoloV7, YoloV8
+from ops.loss.yolo_loss import YoloLossV4To7, YoloLossV8
+
+from dataloader import create_dataloader
+
 from utils.nms import non_max_suppression
-from lightning import LightningModule, Callback
 
 
 class Yolo(LightningModule):
+
+    def __init__(self, cfg, hyp, data, *, imgsz, batch, workers, optim, sche):
+        super(Yolo, self).__init__()
+        self.imgsz = imgsz
+        self.batch = batch
+        self.workers = workers
+        self.sche = sche
+        self.optim = optim
+
+        cfg = OmegaConf.load(cfg)
+        model = cfg.model
+        self.phi = cfg.phi
+        self.num_classes = cfg.nc
+
+        self.hyp = OmegaConf.load(hyp)
+        self.data = OmegaConf.load(data)
+
+        if model == 'yolov3':
+            self.model = YoloV4(cfg.anchors, self.num_classes, self.phi)
+            self.compute_loss = YoloLossV4To7(self, 1)
+        elif model == 'yolov4':
+            self.model = YoloV4(cfg.anchors, self.num_classes, self.phi)
+            self.compute_loss = YoloLossV4To7(self, 1)
+        elif model == 'yolov5':
+            self.model = YoloV5(cfg.anchors, self.num_classes, self.phi)
+            self.compute_loss = YoloLossV4To7(self, 3)
+        elif model == 'yolov7':
+            self.model = YoloV7(cfg.anchors, self.num_classes, self.phi)
+            self.compute_loss = YoloLossV4To7(self, 5)
+        elif model == 'yolov8':
+            self.model = YoloV8(cfg.num_classes, self.phi)
+            self.compute_loss = YoloLossV8(self)
+        else:
+            raise TypeError(f"yolo not exist {model} model")
+
+    def train_dataloader(self):
+        return create_dataloader(self.data.train,
+                                 self.imgsz,
+                                 self.batch,
+                                 self.data.names,
+                                 hyp=self.hyp,
+                                 image_set='car_train',
+                                 augment=True,
+                                 workers=self.workers,
+                                 shuffle=True,
+                                 persistent_workers=True)
+
+    def val_dataloader(self):
+        return create_dataloader(self.data.val,
+                                 self.imgsz,
+                                 self.batch * 2,
+                                 self.data.names,
+                                 hyp=self.hyp,
+                                 image_set='car_val',
+                                 augment=False,
+                                 workers=self.workers,
+                                 shuffle=False,
+                                 persistent_workers=True)
+
+    def forward(self, x):
+        return self.model(x)
 
     def training_step(self, batch, batch_idx):
         images, targets, shape = batch
@@ -68,27 +134,26 @@ class Yolo(LightningModule):
             self.box_map_metric.reset()
 
     def configure_model(self) -> None:
-        m = self.head  # detection head models
+        m = self.model.head  # detection head models
         nl = m.nl  # number of detection layers (to scale hyp)
         nc = m.nc
         self.hyp["box"] *= 3 / nl  # scale to layers
         self.hyp["cls"] *= nc / 80 * 3 / nl  # scale to classes and layers
-        self.hyp["obj"] *= (max(self.opt.image_size[0],
-                                self.opt.image_size[1]) / 640) ** 2 * 3 / nl  # scale to image size and layers
-        self.hyp["label_smoothing"] = self.opt.label_smoothing
+        self.hyp["obj"] *= (max(self.imgsz[0],
+                                self.imgsz[1]) / 640) ** 2 * 3 / nl  # scale to image size and layers
 
         self.box_map_metric = MeanAveragePrecision(device=self.device, background=False)
 
     def configure_optimizers(self):
         optimizer = smart_optimizer(self,
-                                    self.opt.optimizer,
+                                    self.optim,
                                     self.hyp['lr'],
                                     self.hyp['momentum'],
                                     self.hyp['weight_decay'])
 
         scheduler = smart_scheduler(
             optimizer,
-            self.opt.scheduler,
+            self.sche,
             self.current_epoch - 1,
             lrf=self.hyp['lrf'],
             max_epochs=self.trainer.max_epochs

@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ops.loss.basic_loss import BasicLoss
 from ops.metric.DetectionMetric import smooth_BCE
 
 from utils.tal import TaskAlignedAssigner, TaskNearestAssigner
@@ -14,15 +13,17 @@ from utils.boxes import bbox_iou, iou_loss, box_convert, dist2bbox, bbox2dist
 torch.set_printoptions(precision=4, sci_mode=False)
 
 
-class YoloAnchorBasedLoss(BasicLoss):
+class YoloAnchorBasedLoss(nn.Module):
     def __init__(self, model, topk=3):
-        super(YoloAnchorBasedLoss, self).__init__(model)
+        super(YoloAnchorBasedLoss, self).__init__()
 
-        m = model.head
+        self.hyp = model.hyp
+        m = model.model.head
+
         self.cp, self.cn = smooth_BCE(eps=self.hyp.get('label_smoothing', 0.0))
 
         # yolo 小grid大anchor，大grid小anchor
-        self.anchors = m.anchors
+        self.register_buffer("anchors", m.anchors)
         self.nl = m.nl
         self.na = m.na
         self.nc = m.nc
@@ -36,14 +37,15 @@ class YoloAnchorBasedLoss(BasicLoss):
         self.balance = [4.0, 1.0, 0.4]
 
         # Define criteria
-        self.BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([self.hyp['cls_pw']], device=self.device))
-        self.BCEobj = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([self.hyp['obj_pw']], device=self.device))
+        self.BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([self.hyp['cls_pw']]))
+        self.BCEobj = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([self.hyp['obj_pw']]))
 
 
-class YoloAnchorFreeLoss(BasicLoss):
+class YoloAnchorFreeLoss(nn.Module):
     def __init__(self, model):
         super(YoloAnchorFreeLoss, self).__init__(model)
 
+        self.hyp = model.hyp
         m = model.head
 
         self.make_anchors = m.make_anchors
@@ -191,7 +193,9 @@ class YoloLossV4To7(YoloAnchorBasedLoss):
             out[..., 1:5] = out[..., 1:5]
         return out
 
-    def forward(self, preds, targets, image_size):
+    def forward(self, preds, targets, imgsz):
+        self.device = imgsz.device
+
         loss = torch.zeros(3, dtype=torch.float32, device=self.device)
         feats = preds[1] if isinstance(preds, tuple) else preds
         preds = [
@@ -207,7 +211,7 @@ class YoloLossV4To7(YoloAnchorBasedLoss):
         for i in range(self.nl):
             _, ng, _ = torch.as_tensor(feats[i].shape, device=self.device).split(2)
 
-            stride = (image_size / ng)[[1, 0]]
+            stride = (imgsz / ng)[[1, 0]]
 
             target_box, target_score, anc_wh, fg_mask = self.assigner(
                 self.anchors[i] / stride,
@@ -272,7 +276,8 @@ class YoloLossV8(YoloAnchorFreeLoss):
             out[..., 1:5] = box_convert(out[..., 1:5], in_fmt='cxcywh', out_fmt='xyxy')
         return out
 
-    def forward(self, preds, targets, image_size):
+    def forward(self, preds, targets, imgsz):
+        self.device = imgsz.deivce
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
         feats = preds[1] if isinstance(preds, tuple) else preds
         pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
@@ -285,7 +290,7 @@ class YoloLossV8(YoloAnchorFreeLoss):
         dtype = pred_scores.dtype
         batch_size = pred_scores.shape[0]
         # make grid
-        anchor_points, stride_tensor = self.make_anchors(image_size, preds)
+        anchor_points, stride_tensor = self.make_anchors(imgsz, preds)
 
         targets = self.targets_preprocess(targets, batch_size)
         gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy

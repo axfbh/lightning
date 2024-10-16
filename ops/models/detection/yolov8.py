@@ -5,12 +5,9 @@ import math
 from ops.models.backbone.cspdarknet import CSPDarknetV8, CBM, C2f
 from ops.models.backbone.utils import _cspdarknet_extractor
 from ops.models.head.yolo_head import YoloV8Head
-from ops.models.detection.utils import Yolo
-from ops.loss.yolo_loss import YoloLossV8
-from ops.metric.DetectionMetric import MeanAveragePrecision
 
 
-class YoloV8(Yolo):
+class YoloV8(nn.Module):
     def __init__(self, num_classes, phi):
         super(YoloV8, self).__init__()
 
@@ -96,6 +93,3 @@ class YoloV8(Yolo):
         # ---------------------------------------------------#
 
         return self.head([P3, P4, P5], H, W)
-
-    def on_fit_start(self) -> None:
-        self.compute_loss = YoloLossV8(self)
