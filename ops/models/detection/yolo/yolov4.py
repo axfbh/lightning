@@ -3,7 +3,9 @@ import torch
 from ops.models.backbone.cspdarknet import CSPDarknetV4, CBM
 from ops.models.backbone.utils import _cspdarknet_extractor
 from ops.models.head.yolo_head import YoloV4Head
+from ops.models.detection.yolo.utils import YoloModel
 from ops.models.neck.spp import SPP
+from ops.loss.yolo_loss import YoloLossV4To7
 
 
 class Upsample(nn.Module):
@@ -40,9 +42,9 @@ def make_three_conv(filters_list, in_filters):
     return m
 
 
-class YoloV4(nn.Module):
-    def __init__(self, anchors, num_classes, phi):
-        super(YoloV4, self).__init__()
+class YoloV4(YoloModel):
+    def __init__(self, anchors, num_classes, phi, *args, **kwargs):
+        super(YoloV4, self).__init__(*args, **kwargs)
 
         width_multiple = {'n': 0.25, 's': 0.50, 'm': 0.75, 'l': 1.0, 'x': 1.25}[phi]
         depth_multiple = {'n': 0.33, 's': 0.33, 'm': 0.67, 'l': 1.0, 'x': 1.33}[phi]
@@ -103,3 +105,6 @@ class YoloV4(nn.Module):
         P5 = self.make_five_conv4(P5)
 
         return self.head([P3, P4, P5], H, W)
+
+    def on_fit_start(self) -> None:
+        self.compute_loss = YoloLossV4To7(self, 1)

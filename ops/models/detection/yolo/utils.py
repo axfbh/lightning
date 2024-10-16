@@ -1,81 +1,26 @@
 from typing import Any
-
 from omegaconf import OmegaConf
 
 from lightning import LightningModule
 
 from ops.metric.DetectionMetric import MeanAveragePrecision
 from ops.utils.torch_utils import ModelEMA, smart_optimizer, smart_scheduler
-from ops.models.detection import YoloV5, YoloV4, YoloV7, YoloV8
-from ops.loss.yolo_loss import YoloLossV4To7, YoloLossV8
-
-from dataloader import create_dataloader
-
 from utils.nms import non_max_suppression
 
 
-class Yolo(LightningModule):
+class YoloModel(LightningModule):
 
-    def __init__(self, cfg, hyp, data, *, imgsz, batch, workers, optim, sche):
-        super(Yolo, self).__init__()
+    def __init__(self, hyp, *, imgsz, batch, optim, sche):
+        super(YoloModel, self).__init__()
         self.imgsz = imgsz
         self.batch = batch
-        self.workers = workers
         self.sche = sche
         self.optim = optim
 
-        cfg = OmegaConf.load(cfg)
-        model = cfg.model
-        self.phi = cfg.phi
-        self.num_classes = cfg.nc
-
-        self.hyp = OmegaConf.load(hyp)
-        self.data = OmegaConf.load(data)
-
-        if model == 'yolov3':
-            self.model = YoloV4(cfg.anchors, self.num_classes, self.phi)
-            self.compute_loss = YoloLossV4To7(self, 1)
-        elif model == 'yolov4':
-            self.model = YoloV4(cfg.anchors, self.num_classes, self.phi)
-            self.compute_loss = YoloLossV4To7(self, 1)
-        elif model == 'yolov5':
-            self.model = YoloV5(cfg.anchors, self.num_classes, self.phi)
-            self.compute_loss = YoloLossV4To7(self, 3)
-        elif model == 'yolov7':
-            self.model = YoloV7(cfg.anchors, self.num_classes, self.phi)
-            self.compute_loss = YoloLossV4To7(self, 5)
-        elif model == 'yolov8':
-            self.model = YoloV8(cfg.num_classes, self.phi)
-            self.compute_loss = YoloLossV8(self)
-        else:
-            raise TypeError(f"yolo not exist {model} model")
-
-    def train_dataloader(self):
-        return create_dataloader(self.data.train,
-                                 self.imgsz,
-                                 self.batch,
-                                 self.data.names,
-                                 hyp=self.hyp,
-                                 image_set='car_train',
-                                 augment=True,
-                                 workers=self.workers,
-                                 shuffle=True,
-                                 persistent_workers=True)
-
-    def val_dataloader(self):
-        return create_dataloader(self.data.val,
-                                 self.imgsz,
-                                 self.batch * 2,
-                                 self.data.names,
-                                 hyp=self.hyp,
-                                 image_set='car_val',
-                                 augment=False,
-                                 workers=self.workers,
-                                 shuffle=False,
-                                 persistent_workers=True)
+        self.hyp = hyp
 
     def forward(self, x):
-        return self.model(x)
+        return self(x)
 
     def training_step(self, batch, batch_idx):
         images, targets, shape = batch
