@@ -65,16 +65,17 @@ class WarmupLR(Callback):
     def on_train_batch_start(
             self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", batch: Any, batch_idx: int
     ) -> None:
-        opt = pl_module.optimizers()
-        sch = pl_module.lr_schedulers()
+        optimizer = pl_module.optimizers()
+        scheduler = pl_module.lr_schedulers()
         epoch = pl_module.current_epoch
 
         ni, nw, batch_size = self._update_warmup_parameters(trainer, epoch, batch_idx)
+
         if ni <= nw:
             xi = [0, nw]  # x interp
             trainer.accumulate_grad_batches = max(1, np.interp(ni, xi, [1, self.nbs / batch_size]).round())
-            for j, x in enumerate(opt.param_groups):
-                lf = sch.lr_lambdas[j]
+            for j, x in enumerate(optimizer.param_groups):
+                lf = scheduler.lr_lambdas[j]
                 x["lr"] = np.interp(
                     ni,
                     xi,

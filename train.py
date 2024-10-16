@@ -23,9 +23,6 @@ def parse_opt():
     parser.add_argument("--optimizer", type=str, choices=["SGD", "Adam", "AdamW"],
                         default="SGD",
                         help="optimizer")
-    parser.add_argument("--scheduler", type=str, choices=["Cosine", "MultiStep", "Polynomial", "OneLinearLR"],
-                        default="OneLinearLR",
-                        help="scheduler")
     parser.add_argument("--sync-bn", action="store_true", help="use SyncBatchNorm, only available in DDP mode")
     parser.add_argument("--workers", type=int, default=2, help="max dataloader workers (per RANK in DDP mode)")
     parser.add_argument("--project", default="runs", help="save to project/name")
@@ -40,7 +37,7 @@ def parse_opt():
 def main(opt):
     model = Yolo(opt.cfg)
 
-    model.fit(data=opt.data, imgsz=opt.imgsz, batch=opt.batch, workers=opt.workers)
+    model.train(data=opt.data, imgsz=opt.imgsz, batch=opt.batch, workers=opt.workers)
 
 
 if __name__ == '__main__':

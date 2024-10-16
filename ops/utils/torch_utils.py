@@ -2,7 +2,7 @@ import os
 import math
 import platform
 import random
-
+from typing import Union, List
 import numpy as np
 
 from copy import deepcopy
@@ -18,6 +18,7 @@ import torch.distributed as dist
 from ops.utils.logging import colorstr
 from lightning import Callback
 from lightning.fabric.utilities.rank_zero import rank_zero_info
+from lightning.pytorch.strategies import DDPStrategy
 from torch.optim.lr_scheduler import LRScheduler
 
 
@@ -151,6 +152,18 @@ def output_to_target(output, max_det=300):
 
 def from_torch_to_numpy(feat: torch.Tensor):
     return feat.cpu().numpy()
+
+
+def auto_distribute(num_nodes, device, master_addr, master_port, node_rank):
+    ddp = 'auto'
+
+    if num_nodes > 1 or (isinstance(device, List) and len(device) > 1):
+        os.environ['MASTER_ADDR'] = master_addr
+        os.environ['MASTER_PORT'] = master_port
+        os.environ['NODE_RANK'] = node_rank
+        ddp = DDPStrategy(process_group_backend="nccl" if torch.distributed.is_nccl_available() else 'gloo')
+
+    return ddp
 
 
 class ModelEMA:
