@@ -55,7 +55,7 @@ class Yolo:
               name='train',
               optimizer='SGD',
               resume=False,
-              lr=0.01,
+              lr0=0.01,
               lrf=0.01,
               momentum=0.937,
               weight_decay=0.0005,
@@ -64,6 +64,7 @@ class Yolo:
               warmup_bias_lr=0.1,
               box=7.5,
               cls=0.5,
+              obj=1.0,
               dfl=1.5,
               nbs=64,
               degrees: float = 0.0,
@@ -78,24 +79,45 @@ class Yolo:
               node_rank: str = "0",
               num_nodes=1
               ):
-        hyp = OmegaConf.load('./cfg/default.yaml')
-
         # ------------ hyp-parameter ------------
+        hyp = OmegaConf.load('./cfg/default.yaml')
+        hyp.update({
+            'epochs': epochs,
+            'batch': batch,
+            'device': device,
+            'workers': workers,
+            'project': project,
+            'name': name,
+            'optimizer': optimizer,
+            'resume': resume,
+            'lr0': lr0,
+            'lrf': lrf,
+            'momentum': momentum,
+            'weight_decay': weight_decay,
+            'warmup_epochs': warmup_epochs,
+            'warmup_momentum': warmup_momentum,
+            'warmup_bias_lr': warmup_bias_lr,
+            'box': box,
+            'cls': cls,
+            'obj': obj,
+            'dfl': dfl,
+            'nbs': nbs,
+            'degrees': degrees,
+            'translate': translate,
+            'scale': scale,
+            'flipud': flipud,
+            'fliplr': fliplr,
+            'mosaic': mosaic,
+        })
         rank_zero_info(colorstr("hyperparameters: ") + ", ".join(f"{k}={v}" for k, v in hyp.items()))
 
         # ------------- cfg -------------
         data = OmegaConf.load(data)
 
         train_dataloader = create_dataloader(data.train,
-                                             imgsz,
-                                             batch,
+                                             hyp.batch,
                                              data.names,
-                                             degrees,
-                                             translate,
-                                             scale,
-                                             flipud,
-                                             fliplr,
-                                             mosaic,
+                                             hyp,
                                              image_set='car_train',
                                              augment=True,
                                              workers=workers,
@@ -103,9 +125,9 @@ class Yolo:
                                              persistent_workers=True)
 
         val_dataloader = create_dataloader(data.val,
-                                           imgsz,
-                                           batch * 2,
+                                           hyp.batch * 2,
                                            data.names,
+                                           hyp,
                                            image_set='car_val',
                                            augment=False,
                                            workers=workers,
@@ -113,12 +135,12 @@ class Yolo:
                                            persistent_workers=True)
         params = self.params
         params.update({
-            'imgsz': imgsz,
-            'optim': optimizer
+            'imgsz': hyp.imgsz,
+            'optim': hyp.optimizer
         })
         model = self.model(**params)
 
-        accelerator = device if device in ["cpu", "tpu", "ipu", "hpu", "mps"] else 'gpu'
+        accelerator = hyp.device if hyp.device in ["cpu", "tpu", "ipu", "hpu", "mps"] else 'gpu'
 
         bar_train_title = ("box_loss", "obj_loss", "cls_loss")
         bar_val_title = ("Images", "Instances", "P", "R", "mAP50", "mAP50-95")
@@ -129,11 +151,11 @@ class Yolo:
         # accumulate = max(round(nbs / batch_size), 1)
         # hyp["weight_decay"] *= batch_size * accumulate / nbs
 
-        warmup_callback = WarmupLR(nbs=nbs,
-                                   momentum=momentum,
-                                   warmup_bias_lr=warmup_bias_lr,
-                                   warmup_epoch=warmup_epochs,
-                                   warmup_momentum=warmup_momentum)
+        warmup_callback = WarmupLR(nbs=hyp.nbs,
+                                   momentum=hyp.momentum,
+                                   warmup_bias_lr=hyp.warmup_bias_lr,
+                                   warmup_epoch=hyp.warmup_epochs,
+                                   warmup_momentum=hyp.warmup_momentum)
 
         checkpoint_callback = ModelCheckpoint(filename='best',
                                               save_last=True,
@@ -149,11 +171,11 @@ class Yolo:
 
         self._trainer = L.Trainer(
             accelerator=accelerator,
-            devices=device,
+            devices=hyp.device,
             num_nodes=num_nodes,
             logger=TensorBoardLogger(save_dir=f'./{project}', name=name),
-            strategy=auto_distribute(num_nodes, device, master_addr, master_port, node_rank),
-            max_epochs=epochs,
+            strategy=auto_distribute(num_nodes, hyp.device, master_addr, master_port, node_rank),
+            max_epochs=hyp.epochs,
             # accumulate_grad_batches=accumulate,
             gradient_clip_val=10,
             gradient_clip_algorithm="norm",

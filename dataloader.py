@@ -80,15 +80,9 @@ class MyDataSet(Dataset):
 
 
 def create_dataloader(path,
-                      image_size,
-                      batch_size,
+                      batch,
                       names,
-                      degrees: float = 0.0,
-                      translate: float = 0.1,
-                      scale: float = 0.5,
-                      flipud: float = 0.0,
-                      fliplr: float = 0.5,
-                      mosaic: float = 1.0,
+                      hyp,
                       image_set=None,
                       augment=False,
                       workers=3,
@@ -99,23 +93,23 @@ def create_dataloader(path,
 
     aug_mosaic = Mosaic(
         reference_data=cache,
-        height=image_size[0],
-        width=image_size[0],
+        height=hyp.imgsz[0],
+        width=hyp.imgsz[1],
         read_fn=A.Compose([
-            ResizeShortLongest(min_size=image_size[0], max_size=image_size[1], always_apply=True),
+            ResizeShortLongest(min_size=hyp.imgsz[0], max_size=hyp.imgsz[1], always_apply=True),
         ], A.BboxParams(format='pascal_voc', label_fields=['classes'])),
-        scale=scale,
-        translate=translate,
+        scale=hyp.scale,
+        translate=hyp.translate,
         value=114,
-        p=mosaic
+        p=hyp.mosaic
     )
 
     transform = A.Compose([
         RandomShiftScaleRotate(
-            scale_limit=(1 - scale, 1 + scale),
-            shift_limit_x=(0.5 - translate, 0.5 + translate),
-            shift_limit_y=(0.5 - translate, 0.5 + translate),
-            rotate_limit=(degrees, degrees),
+            scale_limit=(1 - hyp.scale, 1 + hyp.scale),
+            shift_limit_x=(0.5 - hyp.translate, 0.5 + hyp.translate),
+            shift_limit_y=(0.5 - hyp.translate, 0.5 + hyp.translate),
+            rotate_limit=(hyp.degrees, hyp.degrees),
             border_mode=cv2.BORDER_CONSTANT,
             value=(114, 114, 114),
             position=RandomShiftScaleRotate.PositionType.TOP_LEFT,
@@ -125,8 +119,8 @@ def create_dataloader(path,
         A.MedianBlur(p=0.01),
         A.ToGray(p=0.01),
         A.CLAHE(p=0.01),
-        A.HorizontalFlip(p=fliplr),
-        A.VerticalFlip(p=flipud),
+        A.HorizontalFlip(p=hyp.fliplr),
+        A.VerticalFlip(p=hyp.flipud),
     ], A.BboxParams(format='pascal_voc', label_fields=['classes'], min_visibility=0.2))
 
     if augment:
@@ -136,17 +130,17 @@ def create_dataloader(path,
     dataset = MyDataSet(
         cache=cache,
         aug_mosaic=aug_mosaic,
-        image_size=image_size,
+        image_size=hyp.imgsz,
         augment=augment,
         transform=transform
     )
 
-    batch_size = min(batch_size, len(dataset))
+    batch = min(batch, len(dataset))
     nd = torch.cuda.device_count()  # number of CUDA devices
-    nw = min([os.cpu_count() // max(nd, 1), batch_size if batch_size > 1 else 0, workers])  # number of workers
+    nw = min([os.cpu_count() // max(nd, 1), batch if batch > 1 else 0, workers])  # number of workers
 
     return DataLoader(dataset=dataset,
-                      batch_size=batch_size,
+                      batch_size=batch,
                       shuffle=shuffle,
                       num_workers=nw,
                       pin_memory=PIN_MEMORY,
