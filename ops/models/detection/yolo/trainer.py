@@ -1,3 +1,5 @@
+import os.path
+
 from omegaconf import OmegaConf
 
 import lightning as L
@@ -16,9 +18,22 @@ from dataloader import create_dataloader
 from functools import partial
 
 
+def is_exist_model(path):
+    if os.path.exists(path):
+        model = OmegaConf.load(path)
+    else:
+        version = path[4:6]
+        path = os.path.join(f'./cfg/models/yolo/{version}', path)
+        if os.path.exists(path):
+            model = OmegaConf.load(path)
+        else:
+            raise FileNotFoundError(f'{path} file is not exits')
+    return model
+
+
 class Yolo:
     def __init__(self, model: str, weight: str = None):
-        model = OmegaConf.load(model)
+        model = is_exist_model(model)
         version = model.version
         phi = model.phi
         num_classes = model.nc
