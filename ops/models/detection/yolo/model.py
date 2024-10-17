@@ -1,141 +1,112 @@
-from omegaconf import OmegaConf
+from typing import Any
+import torch
 
-import lightning as L
-from lightning.pytorch.loggers import TensorBoardLogger
-from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.fabric.utilities.rank_zero import rank_zero_info
+from lightning import LightningModule
 
-from ops.utils import extract_ip
-from ops.utils.callbacks import WarmupLR
-from ops.utils.callbacks import PlotLogger, TQDMProgressBar
-from ops.utils.logging import colorstr
-from ops.utils.torch_utils import auto_distribute
-from ops.models.detection.yolo import YoloV5, YoloV4, YoloV7, YoloV8
+from ops.metric.DetectionMetric import MeanAveragePrecision
+from ops.utils.torch_utils import ModelEMA, smart_optimizer
+from ops.utils.torch_utils import one_linear
 
-from dataloader import create_dataloader
+from utils.nms import non_max_suppression
 
 
-class Yolo:
-    def __init__(self, model: str, weight: str = None):
-        model = OmegaConf.load(model)
-        version = model.version
-        phi = model.phi
-        num_classes = model.nc
-        anchors = model.anchors
+class YoloModel(LightningModule):
 
-        self.weight = weight
+    def __init__(self, hyp):
+        super(YoloModel, self).__init__()
+        self.hyp = hyp
 
-        self.model = {
-            'yolov3': YoloV4,
-            'yolov4': YoloV4,
-            'yolov5': YoloV5,
-            'yolov7': YoloV7,
-            'yolov8': YoloV8,
-        }[version]
+    def forward(self, x):
+        return self(x)
 
-        self.params = {
-            'yolov3': {'anchors': anchors, 'num_classes': num_classes, 'phi': phi},
-            'yolov4': {'anchors': anchors, 'num_classes': num_classes, 'phi': phi},
-            'yolov5': {'anchors': anchors, 'num_classes': num_classes, 'phi': phi},
-            'yolov7': {'anchors': anchors, 'num_classes': num_classes, 'phi': phi},
-            'yolov8': {'num_classes': num_classes, 'phi': phi},
-        }[version]
+    def training_step(self, batch, batch_idx):
+        images, targets, shape = batch
 
-    def train(self,
-              *,
-              data: str,
-              master_addr: str = extract_ip(),
-              master_port: str = "8888",
-              node_rank: str = "0",
-              num_nodes: int = 1,
-              **kwargs):
-        """
-        @param data: 数据集配置文件的路径.
-        @param master_addr: 分布式，主机地址.
-        @param master_port: 分布式，主机端口.
-        @param node_rank: 分布式，当前机器 id.
-        @param num_nodes: 分布式，当前机器 gpu 数量.
-        @param imgsz: 定义输入图像的尺寸 HxW.
-        @param device: 指定用于训练的计算设备：单个GPU (device=1）、多个 GPU (device=['0','1']）、CPU (device=cpu) 或MPS for Apple silicon (device=mps)
-        @param project: 保存训练结果的项目目录名称。允许有组织地存储不同的实验.
-        @param name: 训练运行的名称。用于在项目文件夹内创建一个子目录，用于存储训练日志和输出结果.
-        @return:
-        """
-        # ------------ hyp-parameter ------------
-        hyp = OmegaConf.load('./cfg/default.yaml')
-        hyp.update(kwargs)
-        rank_zero_info(colorstr("hyperparameters: ") + ", ".join(f"{k}={v}" for k, v in hyp.items()))
+        images = images / 255.
 
-        # ------------ model ------------
-        params = self.params
-        params.update({
-            'hyp': hyp,
-        })
-        model = self.model(**params)
+        preds = self(images)
 
-        # ------------ data ------------
-        data = OmegaConf.load(data)
+        loss, loss_items = self.compute_loss(preds, targets, shape)
 
-        train_dataloader = create_dataloader(data.train,
-                                             hyp.batch,
-                                             data.names,
-                                             hyp,
-                                             image_set='car_train',
-                                             augment=True,
-                                             workers=hyp.workers,
-                                             shuffle=True,
-                                             persistent_workers=True)
+        self.log_dict({'box_loss': loss_items[0],
+                       'obj_loss': loss_items[1],
+                       'cls_loss': loss_items[2]},
+                      on_epoch=True, sync_dist=True, batch_size=self.trainer.train_dataloader.batch_size)
 
-        val_dataloader = create_dataloader(data.val,
-                                           hyp.batch * 2,
-                                           data.names,
-                                           hyp,
-                                           image_set='car_val',
-                                           augment=False,
-                                           workers=hyp.workers,
-                                           shuffle=False,
-                                           persistent_workers=True)
+        # lightning 的 loss / accumulate ，影响收敛
+        return loss * self.trainer.accumulate_grad_batches * self.trainer.world_size
 
-        # ------------ trainer ------------
-        accelerator = hyp.device if hyp.device in ["cpu", "tpu", "ipu", "hpu", "mps"] else 'gpu'
+    def on_train_batch_end(self, outputs, batch: Any, batch_idx: int) -> None:
+        self.ema_model.update(self)
 
-        bar_train_title = ("box_loss", "obj_loss", "cls_loss")
-        bar_val_title = ("Images", "Instances", "P", "R", "mAP50", "mAP50-95")
+    def validation_step(self, batch, batch_idx):
+        images, targets, shape = batch
 
-        warmup_callback = WarmupLR(nbs=hyp.nbs,
-                                   momentum=hyp.momentum,
-                                   warmup_bias_lr=hyp.warmup_bias_lr,
-                                   warmup_epoch=hyp.warmup_epochs,
-                                   warmup_momentum=hyp.warmup_momentum)
+        images = images / 255.
 
-        checkpoint_callback = ModelCheckpoint(filename='best',
-                                              save_last=True,
-                                              monitor='fitness_un',
-                                              mode='max',
-                                              auto_insert_metric_name=False,
-                                              enable_version_counter=False)
-        checkpoint_callback.FILE_EXTENSION = '.pt'
+        preds, train_out = self.ema_model(images)
 
-        plot_callback = PlotLogger(len(bar_val_title))
+        loss = self.compute_loss(train_out, targets, shape)[1]  # box, obj, cls
+        if not self.trainer.sanity_checking:
+            preds = non_max_suppression(preds,
+                                        0.001,
+                                        0.6,
+                                        labels=[],
+                                        max_det=300,
+                                        multi_label=False,
+                                        agnostic=False)
+            self.box_map_metric.update(preds, targets)
+        return loss
 
-        progress_bar_callback = TQDMProgressBar(bar_train_title, bar_val_title)
+    def on_validation_epoch_end(self) -> None:
+        if not self.trainer.sanity_checking:
+            seen, nt, mp, mr, map50, map = self.box_map_metric.compute()
 
-        self._trainer = L.Trainer(
-            accelerator=accelerator,
-            devices=hyp.device,
-            num_nodes=num_nodes,
-            logger=TensorBoardLogger(save_dir=f'./{hyp.project}', name=hyp.name),
-            strategy=auto_distribute(num_nodes, hyp.device, master_addr, master_port, node_rank),
-            max_epochs=hyp.epochs,
-            gradient_clip_val=10,
-            gradient_clip_algorithm="norm",
-            num_sanity_val_steps=1,
-            log_every_n_steps=1,
-            callbacks=[warmup_callback, checkpoint_callback, plot_callback, progress_bar_callback]
-        )
+            fitness = map * 0.9 + map50 * 0.1
 
-        self.trainer.fit(model, train_dataloader, val_dataloader, ckpt_path=self.weight if hyp.resume else None)
+            self.log_dict({'Images_unplot': seen,
+                           'Instances_unplot': nt,
+                           'P': mp,
+                           'R': mr,
+                           'mAP50': map50,
+                           'mAP50-95': map,
+                           'fitness_un': fitness},
+                          on_epoch=True, sync_dist=True, batch_size=self.trainer.val_dataloaders.batch_size)
 
-    @property
-    def trainer(self):
-        return self._trainer
+            self.box_map_metric.reset()
+
+    def configure_model(self) -> None:
+        m = self.head  # detection head models
+        nl = m.nl  # number of detection layers (to scale hyp)
+        nc = m.nc
+
+        self.hyp['box'] *= 3 / nl  # scale to layers
+        self.hyp['cls'] *= nc / 80 * 3 / nl  # scale to classes and layers
+        self.hyp['obj'] *= (max(
+            self.hyp['imgsz'][0],
+            self.hyp['imgsz'][1]
+        ) / 640) ** 2 * 3 / nl  # scale to image size and layers
+
+        batch_size = self.hyp.batch
+        nbs = self.hyp.nbs  # nominal batch size
+        accumulate = max(round(nbs / batch_size), 1)
+        self.hyp['weight_decay'] *= batch_size * accumulate / nbs
+
+        self.box_map_metric = MeanAveragePrecision(device=self.device, background=False)
+
+    def configure_optimizers(self):
+        optimizer = smart_optimizer(self,
+                                    self.hyp['optimizer'],
+                                    self.hyp['lr0'],
+                                    self.hyp['momentum'],
+                                    self.hyp['weight_decay'])
+
+        fn = one_linear(lrf=self.hyp['lrf'], max_epochs=self.hyp['epochs'])
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer,
+                                                      last_epoch=self.current_epoch - 1,
+                                                      lr_lambda=fn)
+
+        self.ema_model = ModelEMA(self)
+
+        return [optimizer], [scheduler]

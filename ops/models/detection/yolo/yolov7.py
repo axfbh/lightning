@@ -8,7 +8,7 @@ from ops.models.neck.spp import SPPCSPC
 from ops.models.head.yolo_head import YoloV7Head
 from ops.models.backbone.elandarknet import ElanDarkNet, CBS, MP1, Elan
 from ops.models.backbone.utils import _elandarknet_extractor
-from ops.models.detection.yolo.utils import YoloModel
+from ops.models.detection.yolo.model import YoloModel
 from ops.loss.yolo_loss import YoloLossV4To7
 
 

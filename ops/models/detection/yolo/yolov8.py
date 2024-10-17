@@ -5,7 +5,7 @@ import math
 from ops.models.backbone.cspdarknet import CSPDarknetV8, CBM, C2f
 from ops.models.backbone.utils import _cspdarknet_extractor
 from ops.models.head.yolo_head import YoloV8Head
-from ops.models.detection.yolo.utils import YoloModel
+from ops.models.detection.yolo.model import YoloModel
 from ops.loss.yolo_loss import YoloLossV8
 
 

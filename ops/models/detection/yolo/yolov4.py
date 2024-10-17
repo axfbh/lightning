@@ -3,7 +3,7 @@ import torch
 from ops.models.backbone.cspdarknet import CSPDarknetV4, CBM
 from ops.models.backbone.utils import _cspdarknet_extractor
 from ops.models.head.yolo_head import YoloV4Head
-from ops.models.detection.yolo.utils import YoloModel
+from ops.models.detection.yolo.model import YoloModel
 from ops.models.neck.spp import SPP
 from ops.loss.yolo_loss import YoloLossV4To7
 
