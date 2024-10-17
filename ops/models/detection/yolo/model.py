@@ -19,13 +19,13 @@ from dataloader import create_dataloader
 
 class Yolo:
     def __init__(self, model, weight=None):
-        self.weight = weight
         model = OmegaConf.load(model)
-
         version = model.version
         phi = model.phi
         num_classes = model.nc
         anchors = model.anchors
+
+        self.weight = weight
 
         self.model = {
             'yolov3': YoloV4,
@@ -78,6 +78,7 @@ class Yolo:
               node_rank: str = "0",
               num_nodes=1
               ):
+        hyp = OmegaConf.load('./cfg/default.yaml')
 
         # ------------ hyp-parameter ------------
         rank_zero_info(colorstr("hyperparameters: ") + ", ".join(f"{k}={v}" for k, v in hyp.items()))

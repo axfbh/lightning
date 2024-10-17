@@ -53,7 +53,7 @@ class YoloV8Head(nn.Module):
     def reset_parameters(self):
         stride = [8, 16, 32]
         """Initialize Detect() biases, WARNING: requires stride availability."""
-        m = self  # self.model[-1]  # Detect() module
+        m = self  # self.models[-1]  # Detect() module
         for a, b, s in zip(m.reg_head, m.cls_head, stride):  # from
             a[-1].bias.data[:] = 1.0  # box
             b[-1].bias.data[: m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)

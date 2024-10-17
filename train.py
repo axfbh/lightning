@@ -9,9 +9,8 @@ def parse_opt():
     # -------------- 参数文件 --------------
     parser.add_argument("--weights", default='./runs/train/version_40/checkpoints/last.pt',
                         help="resume most recent training")
-    parser.add_argument("--cfg", type=str, default="./models/yolov3.yaml", help="models.yaml path")
-    parser.add_argument("--cfg", type=str, default="./cfg/voc.yaml", help="dataset.yaml path")
-    parser.add_argument("--hyp", type=str, default="./cfg/hyp/hyp-yolo-low.yaml", help="hyperparameters path")
+    parser.add_argument("--models", type=str, default="./cfg/models/yolo/v4/yolov4.yaml", help="models.yaml path")
+    parser.add_argument("--data", type=str, default="./cfg/datasets/voc.yaml", help="dataset.yaml path")
 
     # -------------- 参数值 --------------
     parser.add_argument("--epochs", type=int, default=300, help="total training epochs")
@@ -35,7 +34,7 @@ def parse_opt():
 
 
 def main(opt):
-    model = Yolo(opt.cfg)
+    model = Yolo(opt.models)
     model.train(data=opt.data, imgsz=opt.imgsz, batch=opt.batch, workers=opt.workers)
 
 
