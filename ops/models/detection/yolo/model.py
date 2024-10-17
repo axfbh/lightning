@@ -18,14 +18,14 @@ from dataloader import create_dataloader
 
 
 class Yolo:
-    def __init__(self, cfg, weight=None):
+    def __init__(self, model, weight=None):
         self.weight = weight
-        cfg = OmegaConf.load(cfg)
+        model = OmegaConf.load(model)
 
-        model = cfg.model
-        phi = cfg.phi
-        num_classes = cfg.nc
-        anchors = cfg.anchors
+        version = model.version
+        phi = model.phi
+        num_classes = model.nc
+        anchors = model.anchors
 
         self.model = {
             'yolov3': YoloV4,
@@ -33,7 +33,7 @@ class Yolo:
             'yolov5': YoloV5,
             'yolov7': YoloV7,
             'yolov8': YoloV8,
-        }[model]
+        }[version]
 
         self.params = {
             'yolov3': {'anchors': anchors, 'num_classes': num_classes, 'phi': phi},
@@ -41,7 +41,7 @@ class Yolo:
             'yolov5': {'anchors': anchors, 'num_classes': num_classes, 'phi': phi},
             'yolov7': {'anchors': anchors, 'num_classes': num_classes, 'phi': phi},
             'yolov8': {'num_classes': num_classes, 'phi': phi},
-        }[model]
+        }[version]
 
     def train(self,
               *,
@@ -78,6 +78,7 @@ class Yolo:
               node_rank: str = "0",
               num_nodes=1
               ):
+
         # ------------ hyp-parameter ------------
         rank_zero_info(colorstr("hyperparameters: ") + ", ".join(f"{k}={v}" for k, v in hyp.items()))
 

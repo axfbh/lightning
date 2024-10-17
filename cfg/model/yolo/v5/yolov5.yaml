@@ -1,7 +1,7 @@
 # YOLOv7 🚀 by Ultralytics, AGPL-3.0 license
 
 # Parameters
-model: yolov5
+version: yolov5
 
 phi: n
 

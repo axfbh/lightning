@@ -22,6 +22,7 @@ warmup_momentum: 0.8 # (float) warmup initial momentum
 warmup_bias_lr: 0.1 # (float) warmup initial bias lr
 box: 7.5 # (float) box loss gain
 cls: 0.5 # (float) cls loss gain (scale with pixels)
+obj: 3.0  # obj loss gain (scale with pixels)
 dfl: 1.5 # (float) dfl loss gain
 label_smoothing: 0.0 # (float) label smoothing (fraction)
 nbs: 64 # (int) nominal batch size
@@ -36,56 +37,11 @@ mosaic: 1.0 # (float) image mosaic (probability)
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-lr: 0.01 # initial learning rate (SGD=1E-2, Adam=1E-3)
-lrf: 0.01 # final OneCycleLR learning rate (lr0 * lrf)
-momentum: 0.937
-weight_decay: 0.0005
-
-# ---------- 预热器 参数 ----------
-warmup_epoch: 3
-warmup_momentum: 0.8  # warmup initial momentum
-warmup_bias_lr: 0.1  # warmup initial bias lr
-
-# ---------- 数据增强 参数 ----------
-translate: 0.1  # image translation (+/- fraction)
-scale: 0.5  # image scale (+/- gain)
-flipud: 0.0  # image flip up-down (probability)
-fliplr: 0.5  # image flip left-right (probability)
-mosaic: 1.0
-
-# ---------- loss 参数 ----------
-cls_pw: 1.0
-obj_pw: 1.0
-label_smoothing: 0.0
-
 # yolo v5-v7
-anchor_t: 4.0
-box: 0.05  # box loss gain
-cls: 0.5  # cls loss gain
-obj: 1.0  # obj loss gain (scale with pixels)
+#anchor_t: 4.0
+#box: 0.05  # box loss gain
+#cls: 0.5  # cls loss gain
+#obj: 1.0  # obj loss gain (scale with pixels)
 
 # yolo v4
 #anchor_t: 0.219
@@ -96,4 +52,4 @@ obj: 1.0  # obj loss gain (scale with pixels)
 # yolo v8-v9
 #box: 7.5  # box loss gain
 #cls: 0.5  # cls loss gain
-dfl: 1.5  # obj loss gain (scale with pixels)
+#dfl: 1.5  # obj loss gain (scale with pixels)
