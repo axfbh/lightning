@@ -10,7 +10,7 @@ from ops.utils.callbacks import WarmupLR
 from ops.utils.callbacks import PlotLogger, TQDMProgressBar
 from ops.utils.logging import colorstr
 from ops.utils.torch_utils import auto_distribute
-from ops.models.detection.yolo import YoloV5, YoloV4, YoloV7, YoloV8
+from ops.models.detection.yolo import YoloV4, YoloV5, YoloV7, YoloV8
 
 from dataloader import create_dataloader
 from functools import partial
