@@ -1,6 +1,6 @@
 import argparse
 from ops.utils.logging import print_args
-from ops.models.detection.yolo.model import Yolo
+from ops.models.detection.yolo.trainer import Yolo
 
 if __name__ == '__main__':
     model = Yolo("./cfg/models/yolo/v5/yolov5.yaml")
