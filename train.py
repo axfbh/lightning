@@ -1,4 +1,3 @@
-import argparse
 from ops.models.detection.yolo.trainer import Yolo
 
 if __name__ == '__main__':
