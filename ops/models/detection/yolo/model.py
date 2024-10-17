@@ -86,6 +86,7 @@ class Yolo:
                                            shuffle=False,
                                            persistent_workers=True)
 
+        # ------------ trainer ------------
         accelerator = hyp.device if hyp.device in ["cpu", "tpu", "ipu", "hpu", "mps"] else 'gpu'
 
         bar_train_title = ("box_loss", "obj_loss", "cls_loss")

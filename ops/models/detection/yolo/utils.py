@@ -96,11 +96,11 @@ class YoloModel(LightningModule):
     def configure_optimizers(self):
         optimizer = smart_optimizer(self,
                                     self.hyp['optimizer'],
-                                    self.hyp['lr'],
+                                    self.hyp['lr0'],
                                     self.hyp['momentum'],
                                     self.hyp['weight_decay'])
 
-        fn = one_linear(lrf=self.hyp['lrf'], max_epochs=self.trainer.max_epochs)
+        fn = one_linear(lrf=self.hyp['lrf'], max_epochs=self.hyp['epochs'])
 
         scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer,
                                                       last_epoch=self.current_epoch - 1,
