@@ -2,41 +2,6 @@ import argparse
 from ops.utils.logging import print_args
 from ops.models.detection.yolo.model import Yolo
 
-
-def parse_opt():
-    parser = argparse.ArgumentParser()
-
-    # -------------- 参数文件 --------------
-    parser.add_argument("--weights", default='./runs/train/version_40/checkpoints/last.pt',
-                        help="resume most recent training")
-    parser.add_argument("--models", type=str, default="./cfg/models/yolo/v4/yolov4.yaml", help="models.yaml path")
-    parser.add_argument("--data", type=str, default="./cfg/datasets/voc.yaml", help="dataset.yaml path")
-
-    # -------------- 参数值 --------------
-    parser.add_argument("--epochs", type=int, default=300, help="total training epochs")
-    parser.add_argument("--batch", type=int, default=5, help="total batch size for all GPUs")
-    parser.add_argument("--imgsz", type=list, default=[640, 640], help="train, val image size HxW")
-    parser.add_argument("--resume", nargs="?", const=True, default=False, help="resume most recent training")
-    parser.add_argument("--device", default="gpu", help="cpu, gpu, tpu, ipu, hpu, mps, auto")
-    parser.add_argument("--single-cls", action="store_true", help="train multi-class cfg as single-class")
-    parser.add_argument("--optimizer", type=str, choices=["SGD", "Adam", "AdamW"],
-                        default="SGD",
-                        help="optimizer")
-    parser.add_argument("--sync-bn", action="store_true", help="use SyncBatchNorm, only available in DDP mode")
-    parser.add_argument("--workers", type=int, default=2, help="max dataloader workers (per RANK in DDP mode)")
-    parser.add_argument("--project", default="runs", help="save to project/name")
-    parser.add_argument("--name", default="train", help="save to project/name")
-    parser.add_argument("--local_rank", type=int, default=-1, help="Automatic DDP Multi-GPU argument, do not modify")
-    opt = parser.parse_args()
-    print_args(vars(opt))
-
-    return opt
-
-
-def main(opt):
-    model = Yolo(opt.models)
-    model.train(data=opt.data, imgsz=opt.imgsz, batch=opt.batch, workers=opt.workers)
-
-
 if __name__ == '__main__':
-    main(parse_opt())
+    model = Yolo("./cfg/models/yolo/v5/yolov5.yaml")
+    model.train(data="./cfg/datasets/voc.yaml", imgsz=[640, 640], batch=5, box=0.05)

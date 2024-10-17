@@ -51,6 +51,18 @@ class Yolo:
               node_rank: str = "0",
               num_nodes=1,
               **kwargs):
+        """
+        @param data: 数据集配置文件的路径.
+        @param master_addr: 分布式，主机地址.
+        @param master_port: 分布式，主机端口.
+        @param node_rank: 分布式，当前机器 id.
+        @param num_nodes: 分布式，当前机器 gpu 数量.
+        @param imgsz: 定义输入图像的尺寸 HxW.
+        @param device: 指定用于训练的计算设备：单个GPU (device=1）、多个 GPU (device=['0','1']）、CPU (device=cpu) 或MPS for Apple silicon (device=mps)
+        @param project: 保存训练结果的项目目录名称。允许有组织地存储不同的实验.
+        @param name: 训练运行的名称。用于在项目文件夹内创建一个子目录，用于存储训练日志和输出结果.
+        @return:
+        """
         # ------------ hyp-parameter ------------
         hyp = OmegaConf.load('./cfg/default.yaml')
         hyp.update(kwargs)
