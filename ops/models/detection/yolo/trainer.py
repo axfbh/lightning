@@ -1,7 +1,6 @@
 from omegaconf import OmegaConf
 
 import lightning as L
-
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.fabric.utilities.rank_zero import rank_zero_info
