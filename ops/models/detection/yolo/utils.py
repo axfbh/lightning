@@ -11,11 +11,8 @@ from ops.utils.torch_utils import one_linear
 
 class YoloModel(LightningModule):
 
-    def __init__(self, hyp, *, imgsz, optim):
+    def __init__(self, hyp):
         super(YoloModel, self).__init__()
-        self.imgsz = imgsz
-        self.optim = optim
-
         self.hyp = hyp
 
     def forward(self, x):
@@ -81,20 +78,24 @@ class YoloModel(LightningModule):
         m = self.head  # detection head models
         nl = m.nl  # number of detection layers (to scale hyp)
         nc = m.nc
-        self.hyp["box"] *= 3 / nl  # scale to layers
-        self.hyp["cls"] *= nc / 80 * 3 / nl  # scale to classes and layers
-        self.hyp["obj"] *= (max(self.imgsz[0],
-                                self.imgsz[1]) / 640) ** 2 * 3 / nl  # scale to image size and layers
-        batch_size = self.trainer.num_training_batches
-        nbs = 64  # nominal batch size
+
+        self.hyp['box'] *= 3 / nl  # scale to layers
+        self.hyp['cls'] *= nc / 80 * 3 / nl  # scale to classes and layers
+        self.hyp['obj'] *= (max(
+            self.hyp['imgsz'][0],
+            self.hyp['imgsz'][1]
+        ) / 640) ** 2 * 3 / nl  # scale to image size and layers
+
+        batch_size = self.hyp.batch
+        nbs = self.hyp.nbs  # nominal batch size
         accumulate = max(round(nbs / batch_size), 1)
-        self.hyp["weight_decay"] *= batch_size * accumulate / nbs
+        self.hyp['weight_decay'] *= batch_size * accumulate / nbs
 
         self.box_map_metric = MeanAveragePrecision(device=self.device, background=False)
 
     def configure_optimizers(self):
         optimizer = smart_optimizer(self,
-                                    self.optim,
+                                    self.hyp['optimizer'],
                                     self.hyp['lr'],
                                     self.hyp['momentum'],
                                     self.hyp['weight_decay'])
