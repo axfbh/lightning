@@ -20,9 +20,9 @@ def parse_opt():
     # -------------- 参数文件 --------------
     parser.add_argument("--weights", default='./runs/train1/checkpoints/last.pt',
                         help="resume most recent training")
-    # parser.add_argument("--cfg", type=str, default="./models/yolo.yaml", help="models.yaml path")
-    parser.add_argument("--data", type=str, default="../data/cifa100.yaml", help="dataset.yaml path")
-    parser.add_argument("--hyp", type=str, default="../data/hyp/hyp-yolo-low.yaml", help="hyperparameters path")
+    # parser.add_argument("--cfg", type=str, default="./models/yolov3.yaml", help="models.yaml path")
+    parser.add_argument("--cfg", type=str, default="../cfg/cifa100.yaml", help="dataset.yaml path")
+    parser.add_argument("--hyp", type=str, default="../cfg/hyp/hyp-yolo-low.yaml", help="hyperparameters path")
 
     # -------------- 参数值 --------------
     parser.add_argument("--epochs", type=int, default=300, help="total training epochs")
@@ -30,7 +30,7 @@ def parse_opt():
     parser.add_argument("--image-size", type=list, default=[640, 640], help="train, val image size (pixels)")
     parser.add_argument("--resume", nargs="?", const=True, default=False, help="resume most recent training")
     parser.add_argument("--device", default="gpu", help="cuda device, i.e. 0 or 0,1,2,3 or cpu")
-    parser.add_argument("--single-cls", action="store_true", help="train multi-class data as single-class")
+    parser.add_argument("--single-cls", action="store_true", help="train multi-class cfg as single-class")
     parser.add_argument("--optimizer", type=str, choices=["SGD", "Adam", "AdamW"],
                         default="Adam",
                         help="optimizer")

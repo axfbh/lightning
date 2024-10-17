@@ -98,7 +98,7 @@ class JPEG(Base):
 
     Attributes:
         decompressor: Handle object for decompressor.
-        source: numpy array with source data,
+        source: numpy array with source cfg,
                 either encoded raw jpeg which may be decoded/transformed or
                 or source image for the later encode.
         width: image width.
@@ -166,7 +166,7 @@ class JPEG(Base):
         n = self.lib_.tjDecompressHeader2(
             self.decompressor.handle_,
             jpeg.ffi.cast("unsigned char*",
-                          self.source.__array_interface__["data"][0]),
+                          self.source.__array_interface__["cfg"][0]),
             self.source.nbytes,
             jpeg.ffi.cast("int*", whs_base),
             jpeg.ffi.cast("int*", whs_base + whs_itemsize),
@@ -199,10 +199,10 @@ class JPEG(Base):
         n = self.lib_.tjDecompress2(
             self.decompressor.handle_,
             jpeg.ffi.cast("unsigned char*",
-                          self.source.__array_interface__["data"][0]),
+                          self.source.__array_interface__["cfg"][0]),
             self.source.nbytes,
             jpeg.ffi.cast("unsigned char*",
-                          dst.__array_interface__["data"][0]),
+                          dst.__array_interface__["cfg"][0]),
             dst.shape[1], dst.strides[0], dst.shape[0], pixfmt, 0)
         if n:
             raise JPEGRuntimeError("tjDecompress2() failed with error "

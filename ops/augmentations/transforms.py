@@ -40,7 +40,7 @@ class SaltPepperNoise(ImageOnlyTransform):
 
     def __call__(self, *args, force_apply: bool = False, **kwargs) -> Dict[str, Any]:
         if args:
-            raise KeyError("You have to pass data to augmentations as named arguments, for example: aug(image=image)")
+            raise KeyError("You have to pass cfg to augmentations as named arguments, for example: aug(image=image)")
         self.update_target_dependence(**kwargs)
         return super().__call__(force_apply=force_apply, **kwargs)
 

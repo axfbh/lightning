@@ -16,7 +16,7 @@ from ops.utils.plots import Annotator
 from ops.utils.torch_utils import de_parallel
 
 
-def yaml_save(file: Union[str, Path] = "data.yaml", data={}):
+def yaml_save(file: Union[str, Path] = "cfg.yaml", data={}):
     # Single-line safe yaml saving
     with open(file, "w") as f:
         yaml.safe_dump({k: str(v) if isinstance(v, Path) else v for k, v in data.items()}, f, sort_keys=False)

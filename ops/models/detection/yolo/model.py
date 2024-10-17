@@ -81,7 +81,7 @@ class Yolo:
         # ------------ hyp-parameter ------------
         rank_zero_info(colorstr("hyperparameters: ") + ", ".join(f"{k}={v}" for k, v in hyp.items()))
 
-        # ------------- data -------------
+        # ------------- cfg -------------
         data = OmegaConf.load(data)
 
         train_dataloader = create_dataloader(data.train,

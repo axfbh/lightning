@@ -98,7 +98,7 @@ def _initialize(backends):
       tjregion r;
       int op;
       int options;
-      void *data;
+      void *cfg;
       void *customFilter;
     } tjtransform;
 
