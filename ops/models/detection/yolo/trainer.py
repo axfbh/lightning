@@ -14,6 +14,7 @@ from ops.utils.torch_utils import auto_distribute
 from ops.models.detection.yolo import YoloV5, YoloV4, YoloV7, YoloV8
 
 from dataloader import create_dataloader
+from functools import partial
 
 
 class Yolo:
@@ -27,19 +28,11 @@ class Yolo:
         self.weight = weight
 
         self.model = {
-            'yolov3': YoloV4,
-            'yolov4': YoloV4,
-            'yolov5': YoloV5,
-            'yolov7': YoloV7,
-            'yolov8': YoloV8,
-        }[version]
-
-        self.params = {
-            'yolov3': {'anchors': anchors, 'num_classes': num_classes, 'phi': phi},
-            'yolov4': {'anchors': anchors, 'num_classes': num_classes, 'phi': phi},
-            'yolov5': {'anchors': anchors, 'num_classes': num_classes, 'phi': phi},
-            'yolov7': {'anchors': anchors, 'num_classes': num_classes, 'phi': phi},
-            'yolov8': {'num_classes': num_classes, 'phi': phi},
+            'yolov3': partial(YoloV4, anchors=anchors, num_classes=num_classes, phi=phi),
+            'yolov4': partial(YoloV4, anchors=anchors, num_classes=num_classes, phi=phi),
+            'yolov5': partial(YoloV5, anchors=anchors, num_classes=num_classes, phi=phi),
+            'yolov7': partial(YoloV7, anchors=anchors, num_classes=num_classes, phi=phi),
+            'yolov8': partial(YoloV8, num_classes=num_classes, phi=phi),
         }[version]
 
     def train(self,
@@ -68,11 +61,7 @@ class Yolo:
         rank_zero_info(colorstr("hyperparameters: ") + ", ".join(f"{k}={v}" for k, v in hyp.items()))
 
         # ------------ model ------------
-        params = self.params
-        params.update({
-            'hyp': hyp,
-        })
-        model = self.model(**params)
+        model = self.model(hyp=hyp)
 
         # ------------ data ------------
         data = OmegaConf.load(data)
