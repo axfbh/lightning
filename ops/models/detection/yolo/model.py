@@ -1,5 +1,3 @@
-import os
-from typing import Union, List
 from omegaconf import OmegaConf
 
 import lightning as L
@@ -18,7 +16,7 @@ from dataloader import create_dataloader
 
 
 class Yolo:
-    def __init__(self, model, weight=None):
+    def __init__(self, model: str, weight: str = None):
         model = OmegaConf.load(model)
         version = model.version
         phi = model.phi
@@ -45,11 +43,11 @@ class Yolo:
 
     def train(self,
               *,
-              data,
+              data: str,
               master_addr: str = extract_ip(),
               master_port: str = "8888",
               node_rank: str = "0",
-              num_nodes=1,
+              num_nodes: int = 1,
               **kwargs):
         """
         @param data: 数据集配置文件的路径.
@@ -129,7 +127,6 @@ class Yolo:
             logger=TensorBoardLogger(save_dir=f'./{hyp.project}', name=hyp.name),
             strategy=auto_distribute(num_nodes, hyp.device, master_addr, master_port, node_rank),
             max_epochs=hyp.epochs,
-            # accumulate_grad_batches=accumulate,
             gradient_clip_val=10,
             gradient_clip_algorithm="norm",
             num_sanity_val_steps=1,
