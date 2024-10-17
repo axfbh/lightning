@@ -92,9 +92,6 @@ class YoloModel(LightningModule):
 
         self.box_map_metric = MeanAveragePrecision(device=self.device, background=False)
 
-    def setup(self, stage: str) -> None:
-        pass
-
     def configure_optimizers(self):
         optimizer = smart_optimizer(self,
                                     self.optim,

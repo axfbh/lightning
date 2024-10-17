@@ -2,9 +2,6 @@ import os
 from typing import Union, List
 from omegaconf import OmegaConf
 
-import torch
-import torch.distributed
-
 import lightning as L
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -21,7 +18,8 @@ from dataloader import create_dataloader
 
 
 class Yolo:
-    def __init__(self, cfg):
+    def __init__(self, cfg, weight=None):
+        self.weight = weight
         cfg = OmegaConf.load(cfg)
 
         model = cfg.model
@@ -46,26 +44,41 @@ class Yolo:
         }[model]
 
     def train(self,
-              data,
               *,
-              epochs=None,
-              hyp=None,
-              imgsz=None,
-              batch=None,
-              workers=None,
-              optimizer='SGD',
-              weight=None,
+              data,
+              epochs=100,
+              batch=16,
+              imgsz=640,
               device: Union[List[int], str, int] = 1,
+              workers=8,
               project='runs',
               name='train',
+              optimizer='SGD',
+              resume=False,
+              lr=0.01,
+              lrf=0.01,
+              momentum=0.937,
+              weight_decay=0.0005,
+              warmup_epochs=3,
+              warmup_momentum=0.8,
+              warmup_bias_lr=0.1,
+              box=7.5,
+              cls=0.5,
+              dfl=1.5,
+              nbs=64,
+              degrees: float = 0.0,
+              translate: float = 0.1,
+              scale: float = 0.5,
+              shear: float = 0.0,
+              flipud: float = 0.0,
+              fliplr: float = 0.5,
+              mosaic: float = 1.0,
               master_addr: str = extract_ip(),
               master_port: str = "8888",
               node_rank: str = "0",
-              num_nodes=1,
-              resume=False):
+              num_nodes=1
+              ):
         # ------------ hyp-parameter ------------
-        hyp = './data/hyp/hyp-yolo-low.yaml' if hyp is None else hyp
-        hyp = OmegaConf.load(hyp)
         rank_zero_info(colorstr("hyperparameters: ") + ", ".join(f"{k}={v}" for k, v in hyp.items()))
 
         # ------------- data -------------
@@ -75,7 +88,12 @@ class Yolo:
                                              imgsz,
                                              batch,
                                              data.names,
-                                             hyp=hyp,
+                                             degrees,
+                                             translate,
+                                             scale,
+                                             flipud,
+                                             fliplr,
+                                             mosaic,
                                              image_set='car_train',
                                              augment=True,
                                              workers=workers,
@@ -86,7 +104,6 @@ class Yolo:
                                            imgsz,
                                            batch * 2,
                                            data.names,
-                                           hyp=hyp,
                                            image_set='car_val',
                                            augment=False,
                                            workers=workers,
@@ -94,7 +111,6 @@ class Yolo:
                                            persistent_workers=True)
         params = self.params
         params.update({
-            'hyp': hyp,
             'imgsz': imgsz,
             'optim': optimizer
         })
@@ -111,11 +127,11 @@ class Yolo:
         # accumulate = max(round(nbs / batch_size), 1)
         # hyp["weight_decay"] *= batch_size * accumulate / nbs
 
-        warmup_callback = WarmupLR(nbs=64,
-                                   momentum=hyp['momentum'],
-                                   warmup_bias_lr=hyp['warmup_bias_lr'],
-                                   warmup_epoch=hyp["warmup_epoch"],
-                                   warmup_momentum=hyp['warmup_momentum'])
+        warmup_callback = WarmupLR(nbs=nbs,
+                                   momentum=momentum,
+                                   warmup_bias_lr=warmup_bias_lr,
+                                   warmup_epoch=warmup_epochs,
+                                   warmup_momentum=warmup_momentum)
 
         checkpoint_callback = ModelCheckpoint(filename='best',
                                               save_last=True,
@@ -144,7 +160,7 @@ class Yolo:
             callbacks=[warmup_callback, checkpoint_callback, plot_callback, progress_bar_callback]
         )
 
-        self.trainer.fit(model, train_dataloader, val_dataloader, ckpt_path=weight if resume else None)
+        self.trainer.fit(model, train_dataloader, val_dataloader, ckpt_path=self.weight if resume else None)
 
     @property
     def trainer(self):
