@@ -13,17 +13,17 @@ from ops.loss.yolo_loss import YoloLossV4To7
 
 
 class YoloV7(YoloModel):
-    def __init__(self, anchors: List, num_classes: int, phi: str, *args, **kwargs):
+    def __init__(self, anchors: List, num_classes: int, scales: str, *args, **kwargs):
         super(YoloV7, self).__init__(*args, **kwargs)
 
-        transition_channels = {'l': 32, 'x': 40}[phi]
+        transition_channels = {'l': 32, 'x': 40}[scales]
         block_channels = 32
-        panet_channels = {'l': 32, 'x': 64}[phi]
-        e = {'l': 2, 'x': 1}[phi]
-        n = {'l': 4, 'x': 6}[phi]
-        ids = {'l': [-1, -2, -3, -4, -5, -6], 'x': [-1, -3, -5, -7, -8]}[phi]
+        panet_channels = {'l': 32, 'x': 64}[scales]
+        e = {'l': 2, 'x': 1}[scales]
+        n = {'l': 4, 'x': 6}[scales]
+        ids = {'l': [-1, -2, -3, -4, -5, -6], 'x': [-1, -3, -5, -7, -8]}[scales]
 
-        self.backbone = _elandarknet_extractor(ElanDarkNet(transition_channels, block_channels, n, phi), 5)
+        self.backbone = _elandarknet_extractor(ElanDarkNet(transition_channels, block_channels, n, scales), 5)
 
         self.sppcspc = SPPCSPC(transition_channels * 32, transition_channels * 16,
                                conv_layer=CBS,

@@ -3,8 +3,6 @@
 # Parameters
 version: yolov7
 
-phi: n
-
 nc: 20  # number of classes
 
 anchors:

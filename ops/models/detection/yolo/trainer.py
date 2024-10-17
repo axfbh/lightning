@@ -19,34 +19,33 @@ from functools import partial
 
 
 def is_exist_model(path):
+    _dir, _file = os.path.split(path)
+    version = _file[4:6]
+    scales = _file[6]
+    _file = _file.replace(_file[6], '')
     if os.path.exists(path):
         model = OmegaConf.load(path)
+    elif os.path.exists(f'./cfg/models/yolo/{version}/{_file}'):
+        model = OmegaConf.load(f'./cfg/models/yolo/{version}/{_file}')
     else:
-        version = path[4:6]
-        path = os.path.join(f'./cfg/models/yolo/{version}', path)
-        if os.path.exists(path):
-            model = OmegaConf.load(path)
-        else:
-            raise FileNotFoundError(f'{path} file is not exits')
-    return model
+        raise FileNotFoundError(f'{path} file is not exits')
+    return model, version, scales
 
 
 class Yolo:
     def __init__(self, model: str, weight: str = None):
-        model = is_exist_model(model)
-        version = model.version
-        phi = model.phi
+        model, version, scales = is_exist_model(model)
         num_classes = model.nc
         anchors = model.anchors
 
         self.weight = weight
 
         self.model = {
-            'yolov3': partial(YoloV4, anchors=anchors, num_classes=num_classes, phi=phi),
-            'yolov4': partial(YoloV4, anchors=anchors, num_classes=num_classes, phi=phi),
-            'yolov5': partial(YoloV5, anchors=anchors, num_classes=num_classes, phi=phi),
-            'yolov7': partial(YoloV7, anchors=anchors, num_classes=num_classes, phi=phi),
-            'yolov8': partial(YoloV8, num_classes=num_classes, phi=phi),
+            'v3': partial(YoloV4, anchors=anchors, num_classes=num_classes, scales=scales),
+            'v4': partial(YoloV4, anchors=anchors, num_classes=num_classes, scales=scales),
+            'v5': partial(YoloV5, anchors=anchors, num_classes=num_classes, scales=scales),
+            'v7': partial(YoloV7, anchors=anchors, num_classes=num_classes, scales=scales),
+            'v8': partial(YoloV8, num_classes=num_classes, scales=scales),
         }[version]
 
     def train(self,

@@ -43,11 +43,11 @@ def make_three_conv(filters_list, in_filters):
 
 
 class YoloV4(YoloModel):
-    def __init__(self, anchors, num_classes, phi, *args, **kwargs):
+    def __init__(self, anchors, num_classes, scales, *args, **kwargs):
         super(YoloV4, self).__init__(*args, **kwargs)
 
-        width_multiple = {'n': 0.25, 's': 0.50, 'm': 0.75, 'l': 1.0, 'x': 1.25}[phi]
-        depth_multiple = {'n': 0.33, 's': 0.33, 'm': 0.67, 'l': 1.0, 'x': 1.33}[phi]
+        width_multiple = {'n': 0.25, 's': 0.50, 'm': 0.75, 'l': 1.0, 'x': 1.25}[scales]
+        depth_multiple = {'n': 0.33, 's': 0.33, 'm': 0.67, 'l': 1.0, 'x': 1.33}[scales]
 
         base_channels = int(width_multiple * 32)  # 64
         base_depth = max(round(depth_multiple * 3), 1)  # 3

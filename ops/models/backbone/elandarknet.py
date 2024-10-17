@@ -52,13 +52,13 @@ class MP1(nn.Module):
 
 
 class ElanDarkNet(nn.Module):
-    def __init__(self, transition_channels=32, block_channels=32, n=2, phi='l', num_classes=1000):
+    def __init__(self, transition_channels=32, block_channels=32, n=2, scales='l', num_classes=1000):
         super(ElanDarkNet, self).__init__()
 
         ids = {
             'l': [-1, -3, -5, -6],
             'x': [-1, -3, -5, -7, -8],
-        }[phi]
+        }[scales]
 
         self.stem = nn.Sequential(
             CBS(3, transition_channels, 3),
