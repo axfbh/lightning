@@ -20,13 +20,14 @@ from functools import partial
 
 def is_exist_model(path):
     _dir, _file = os.path.split(path)
-    version = _file[4:6]
-    scales = _file[6]
-    _file = _file.replace(_file[6], '')
+    prefix, suffix = os.path.splitext(_file)
+    name = prefix[:4]
+    version = prefix[4:6]
+    scales = prefix[6]
     if os.path.exists(path):
         model = OmegaConf.load(path)
-    elif os.path.exists(f'./cfg/models/yolo/{version}/{_file}'):
-        model = OmegaConf.load(f'./cfg/models/yolo/{version}/{_file}')
+    elif os.path.exists(f'./cfg/models/yolo/{version}/{name}{version}{suffix}'):
+        model = OmegaConf.load(f'./cfg/models/yolo/{version}/{name}{version}{suffix}')
     else:
         raise FileNotFoundError(f'{path} file is not exits')
     return model, version, scales
