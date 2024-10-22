@@ -17,11 +17,12 @@ def show(name, img):
 
 
 def imread(path: str):
-    if importlib.import_module('jpeg4py') and path.endswith("jpg"):
-        import jpeg4py as jpeg
-        img = jpeg.JPEG(path).decode()
-    else:
-        img = io.imread(path)
+    img = io.imread(path)
+    # if importlib.import_module('jpeg4py') and path.endswith("jpg"):
+    #     import jpeg4py as jpeg
+    #     img = jpeg.JPEG(path).decode()
+    # else:
+    #     img = io.imread(path)
     return img
 
 
