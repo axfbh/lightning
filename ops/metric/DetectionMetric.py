@@ -49,7 +49,7 @@ def scale_boxes(img1_shape, boxes, img0_shape, ratio_pad=None):
     return boxes
 
 
-def process_batch(detections, labels, iouv):
+def process_batch(detections, gt_bboxes, gt_cls, iouv):
     """
     Return correct prediction matrix
     Arguments:
@@ -59,8 +59,8 @@ def process_batch(detections, labels, iouv):
         correct (array[N, 10]), for 10 IoU levels
     """
     correct = np.zeros((detections.shape[0], iouv.shape[0])).astype(bool)
-    iou = box_iou(labels[:, 1:], detections[:, :4])
-    correct_class = labels[:, 0:1] == detections[:, 5]
+    iou = box_iou(gt_bboxes, detections[:, :4])
+    correct_class = gt_cls.squeeze(-1) == detections[:, 5]
     for i in range(len(iouv)):
         x = torch.where((iou >= iouv[i]) & correct_class)  # IoU > threshold and classes match
         if x[0].shape[0]:
@@ -68,7 +68,7 @@ def process_batch(detections, labels, iouv):
             if x[0].shape[0] > 1:
                 matches = matches[matches[:, 2].argsort()[::-1]]
                 matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
-                # matches = matches[matches[:, 2].argsort()[::-1]]
+                matches = matches[matches[:, 2].argsort()[::-1]]
                 matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
             correct[matches[:, 1].astype(int), i] = True
     return torch.tensor(correct, dtype=torch.bool, device=iouv.device)
@@ -184,17 +184,30 @@ class MeanAveragePrecision:
 
         self.single_cls = single_cls
 
-    def update(self, preds, targets):
+    def _prepare_batch(self, si, batch):
+        idx = batch["batch_idx"] == si
+        cls = batch["cls"][idx].squeeze(-1)
+        cls = cls if self.background else cls - 1
+        bbox = batch["bboxes"][idx]
+        ori_shape = batch["ori_shape"][si]
+        imgsz = batch["img"].shape[2:]
+        if len(cls):
+            bbox = box_convert(bbox, 'cxcywh', 'xyxy')
+        return {"cls": cls, "bbox": bbox, "ori_shape": ori_shape, "imgsz": imgsz}
+
+    def update(self, preds, batch):
         for si, pred in enumerate(preds):
-            labels = targets[targets[:, 0] == si, 1:].clone()
-            labels[:, 0] = labels[:, 0] - 0 if self.background else labels[:, 0] - 1
-            nl, npr = labels.shape[0], pred.shape[0]  # number of labels, predictions
-            correct = torch.zeros(npr, self.niou, dtype=torch.bool, device=self.device)  # init
             self.seen += 1
+            npr = pred.shape[0]
+            pbatch = self._prepare_batch(si, batch)
+
+            cls, bbox = pbatch.pop("cls"), pbatch.pop("bbox")
+            nl = cls.shape[0]  # number of labels, predictions
+            correct = torch.zeros(npr, self.niou, dtype=torch.bool, device=self.device)  # init
 
             if npr == 0:
                 if nl:
-                    self.stats.append((correct, *torch.zeros((2, 0), device=self.device), labels[:, 0]))
+                    self.stats.append((correct, *torch.zeros((2, 0), device=self.device), cls))
                 continue
 
             if self.single_cls:
@@ -203,11 +216,9 @@ class MeanAveragePrecision:
             predn = pred.clone()
 
             if nl:
-                tbox = box_convert(labels[:, 1:5], 'cxcywh', 'xyxy')  # target boxes
-                labelsn = torch.cat((labels[:, 0:1], tbox), 1)
-                correct = process_batch(predn, labelsn, self.iouv)
+                correct = process_batch(predn, gt_bboxes=bbox, gt_cls=cls, iouv=self.iouv)
 
-            self.stats.append((correct, pred[:, 4], pred[:, 5], labels[:, 0]))  # (correct, conf, pcls, tcls)
+            self.stats.append((correct, pred[:, 4], pred[:, 5], cls))  # (correct, conf, pcls, tcls)
 
     def compute(self):
         tp, fp, p, r, f1, mp, mr, map50, ap50, map = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0

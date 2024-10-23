@@ -178,7 +178,7 @@ class YoloLossV3(YoloAnchorBasedLoss):
 
 class YoloLossV4To7(YoloAnchorBasedLoss):
 
-    def targets_preprocess(self, targets, batch_size):
+    def preprocess(self, targets, batch_size):
         """Preprocesses the target counts and matches with the input batch size to output a tensor."""
         if targets.shape[0] == 0:
             out = torch.zeros(batch_size, 0, 5, device=self.device)
@@ -195,7 +195,7 @@ class YoloLossV4To7(YoloAnchorBasedLoss):
             out[..., 1:5] = out[..., 1:5]
         return out
 
-    def forward(self, preds, targets, imgsz):
+    def forward(self, preds, batch):
         loss = torch.zeros(3, dtype=torch.float32, device=self.device)
         feats = preds[1] if isinstance(preds, tuple) else preds
         preds = [
@@ -203,8 +203,10 @@ class YoloLossV4To7(YoloAnchorBasedLoss):
         ]
 
         batch_size = feats[0].shape[0]
+        imgsz = torch.tensor(batch['resized_shape'][0], device=self.device)
 
-        targets = self.targets_preprocess(targets, batch_size)
+        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"]), 1)
+        targets = self.preprocess(targets, batch_size)
         gt_labels, gt_cxys, gt_whs = targets.split((1, 2, 2), 2)  # cls, xyxy
         mask_gt = gt_cxys.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
 

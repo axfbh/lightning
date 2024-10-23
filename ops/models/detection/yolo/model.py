@@ -38,13 +38,11 @@ class YoloModel(LightningModule):
         self.ema_model.update(self)
 
     def validation_step(self, batch, batch_idx):
-        images, targets, shape = batch
+        batch["img"] = batch["img"] / 255.
 
-        images = images / 255.
+        preds, train_out = self.ema_model(batch["img"])
 
-        preds, train_out = self.ema_model(images)
-
-        loss = self.compute_loss(train_out, targets, shape)[1]  # box, obj, cls
+        loss = self.criterion(train_out, batch)[1]  # box, obj, cls
         if not self.trainer.sanity_checking:
             preds = non_max_suppression(preds,
                                         0.001,
@@ -53,7 +51,7 @@ class YoloModel(LightningModule):
                                         max_det=300,
                                         multi_label=False,
                                         agnostic=False)
-            self.box_map_metric.update(preds, targets)
+            self.box_map_metric.update(preds, batch)
         return loss
 
     def on_validation_epoch_end(self) -> None:
