@@ -104,7 +104,7 @@ class YoloLossV4To7(YoloAnchorBasedLoss):
 
         targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"]), 1)
         targets = self.preprocess(targets, batch_size)
-        gt_labels, gt_cxys, gt_whs = targets.split((1, 2, 2), 2)  # cls, xyxy
+        gt_cls, gt_cxys, gt_whs = targets.split((1, 2, 2), 2)  # cls, xyxy
         mask_gt = gt_cxys.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
 
         for i in range(self.nl):
@@ -115,7 +115,7 @@ class YoloLossV4To7(YoloAnchorBasedLoss):
             target_box, target_score, anc_wh, fg_mask = self.assigner(
                 self.anchors[i] / stride,
                 make_grid(*ng, device=self.device),
-                gt_labels,
+                gt_cls,
                 gt_cxys / stride,
                 gt_whs / stride,
                 mask_gt

@@ -361,16 +361,16 @@ class TaskNearestAssigner(nn.Module):
         return target_gt_idx, fg_mask, mask_pos
 
     @torch.no_grad()
-    def forward(self, anc_wh, grid, gt_labels, gt_cxys, gt_whs, mask_gt):
-        self.bs = gt_labels.shape[0]
-        self.n_max_boxes = gt_labels.shape[1]
+    def forward(self, anc_wh, grid, gt_cls, gt_cxys, gt_whs, mask_gt):
+        self.bs = gt_cls.shape[0]
+        self.n_max_boxes = gt_cls.shape[1]
 
         if self.n_max_boxes == 0:
             return (
                 None,
                 None,
                 None,
-                torch.zeros(1, dtype=torch.bool, device=gt_labels.device),
+                torch.zeros(1, dtype=torch.bool, device=gt_cls.device),
             )
 
         mask_pos, distance_metric = self.get_pos_mask(grid, gt_cxys, mask_gt)
@@ -379,7 +379,7 @@ class TaskNearestAssigner(nn.Module):
                                                                         distance_metric,
                                                                         self.n_max_boxes)
 
-        target_score, target_txy, target_wh = self.get_targets(gt_labels,
+        target_score, target_txy, target_wh = self.get_targets(gt_cls,
                                                                gt_cxys,
                                                                gt_whs,
                                                                grid,
