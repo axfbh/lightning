@@ -18,13 +18,11 @@ from ops.augmentations.geometric.transforms import RandomShiftScaleRotate
 from ops.augmentations.geometric.resize import ResizeShortLongest
 from ops.augmentations.transforms import Mosaic
 from ops.utils.logging import colorstr
-from ops.utils.torch_utils import torch_distributed_zero_first
-import ops.cv.io as io
 
 PIN_MEMORY = str(os.getenv("PIN_MEMORY", True)).lower() == "true"  # global pin_memory for dataloaders
 
 
-def collate_fn(batch):
+def yolo_collate_fn(batch):
     im_file, ori_shape, resized_shape, image, target = zip(*batch)
 
     for i, lb in enumerate(target):
@@ -166,5 +164,5 @@ def create_dataloader(path,
                       shuffle=shuffle,
                       num_workers=nw,
                       pin_memory=PIN_MEMORY,
-                      collate_fn=collate_fn,
+                      collate_fn=yolo_collate_fn,
                       persistent_workers=persistent_workers)

@@ -20,13 +20,11 @@ class YoloModel(LightningModule):
         return self(x)
 
     def training_step(self, batch, batch_idx):
-        images, targets, shape = batch
+        batch["img"] = batch["img"] / 255.
 
-        images = images / 255.
+        preds = self(batch["img"])
 
-        preds = self(images)
-
-        loss, loss_items = self.compute_loss(preds, targets, shape)
+        loss, loss_items = self.criterion(preds, batch)
 
         self.log_dict({'box_loss': loss_items[0],
                        'obj_loss': loss_items[1],

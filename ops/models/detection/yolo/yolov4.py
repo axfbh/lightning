@@ -107,4 +107,4 @@ class YoloV4(YoloModel):
         return self.head([P3, P4, P5], H, W)
 
     def on_fit_start(self) -> None:
-        self.compute_loss = YoloLossV4To7(self, 1)
+        self.criterion = YoloLossV4To7(self, 1)
