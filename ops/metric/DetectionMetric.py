@@ -60,7 +60,7 @@ def process_batch(detections, gt_bboxes, gt_cls, iouv):
     """
     correct = np.zeros((detections.shape[0], iouv.shape[0])).astype(bool)
     iou = box_iou(gt_bboxes, detections[:, :4])
-    correct_class = gt_cls.squeeze(-1) == detections[:, 5]
+    correct_class = gt_cls.unsqueeze(-1) == detections[:, 5]
     for i in range(len(iouv)):
         x = torch.where((iou >= iouv[i]) & correct_class)  # IoU > threshold and classes match
         if x[0].shape[0]:
