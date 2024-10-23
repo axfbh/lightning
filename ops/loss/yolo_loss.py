@@ -180,16 +180,23 @@ class YoloLossV4To7(YoloAnchorBasedLoss):
 
     def preprocess(self, targets, batch_size):
         """Preprocesses the target counts and matches with the input batch size to output a tensor."""
-        if targets.shape[0] == 0:
-            out = torch.zeros(batch_size, 0, 5, device=self.device)
+        nl, ne = targets.shape
+        if nl == 0:
+            out = torch.zeros(batch_size, 0, ne - 1, device=self.device)
         else:
+            # 获取 target id
             i = targets[:, 0]  # image index
+            # 获取每个id的target 个数
             _, counts = i.unique(return_counts=True)
             counts = counts.to(dtype=torch.int32)
-            out = torch.zeros(batch_size, counts.max(), 5, device=self.device)
+            # 创建矩阵，根据最多的 target 个数
+            out = torch.zeros(batch_size, counts.max(), ne - 1, device=self.device)
             for j in range(batch_size):
+                # 找打对于 id 的target 索引
                 matches = i == j
+                # 统计有多少个target
                 n = matches.sum()
+                # 将 target 填入矩阵中。
                 if n:
                     out[j, :n] = targets[matches, 1:] - torch.tensor([1, 0, 0, 0, 0], device=targets.device)
             out[..., 1:5] = out[..., 1:5]
@@ -261,7 +268,7 @@ class YoloLossV8(YoloAnchorFreeLoss):
             pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_dist.dtype))
         return dist2bbox(pred_dist, anchor_points, xywh=False)
 
-    def targets_preprocess(self, targets, batch_size):
+    def preprocess(self, targets, batch_size):
         """Preprocesses the target counts and matches with the input batch size to output a tensor."""
         if targets.shape[0] == 0:
             out = torch.zeros(batch_size, 0, 5, device=self.device)
@@ -293,7 +300,7 @@ class YoloLossV8(YoloAnchorFreeLoss):
         # make grid
         anchor_points, stride_tensor = self.make_anchors(imgsz, preds)
 
-        targets = self.targets_preprocess(targets, batch_size)
+        targets = self.preprocess(targets, batch_size)
         gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy
         # 非填充 bbox 样本索引 mask
         mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
