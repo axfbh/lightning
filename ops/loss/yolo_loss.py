@@ -90,7 +90,6 @@ class YoloLossV4To7(YoloAnchorBasedLoss):
                 # 将 target 填入矩阵中。
                 if n:
                     out[j, :n] = targets[matches, 1:] - torch.tensor([1, 0, 0, 0, 0], device=targets.device)
-            out[..., 1:5] = out[..., 1:5]
         return out
 
     def forward(self, preds, batch):
@@ -161,16 +160,23 @@ class YoloLossV8(YoloAnchorFreeLoss):
 
     def preprocess(self, targets, batch_size):
         """Preprocesses the target counts and matches with the input batch size to output a tensor."""
-        if targets.shape[0] == 0:
-            out = torch.zeros(batch_size, 0, 5, device=self.device)
+        nl, ne = targets.shape
+        if nl == 0:
+            out = torch.zeros(batch_size, 0, ne - 1, device=self.device)
         else:
+            # 获取 target id
             i = targets[:, 0]  # image index
+            # 获取每个id的target 个数
             _, counts = i.unique(return_counts=True)
             counts = counts.to(dtype=torch.int32)
-            out = torch.zeros(batch_size, counts.max(), 5, device=self.device)
+            # 创建矩阵，根据最多的 target 个数
+            out = torch.zeros(batch_size, counts.max(), ne - 1, device=self.device)
             for j in range(batch_size):
+                # 找打对于 id 的target 索引
                 matches = i == j
+                # 统计有多少个target
                 n = matches.sum()
+                # 将 target 填入矩阵中。
                 if n:
                     out[j, :n] = targets[matches, 1:]
             out[..., 1:5] = box_convert(out[..., 1:5], in_fmt='cxcywh', out_fmt='xyxy')
