@@ -13,7 +13,7 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
 from ops.dataset.voc_dataset import voc_image_anno_paths, voc_bboxes_labels_from_xml
-from ops.dataset.utils import detect_collate_fn, DataCache, detect_collate_fn_fill
+from ops.dataset.utils import DataCache
 from ops.augmentations.geometric.transforms import RandomShiftScaleRotate
 from ops.augmentations.geometric.resize import ResizeShortLongest
 from ops.augmentations.transforms import Mosaic
@@ -24,7 +24,26 @@ import ops.cv.io as io
 PIN_MEMORY = str(os.getenv("PIN_MEMORY", True)).lower() == "true"  # global pin_memory for dataloaders
 
 
-class MyDataSet(Dataset):
+def collate_fn(batch):
+    im_file, ori_shape, resized_shape, image, target = zip(*batch)
+
+    for i, lb in enumerate(target):
+        lb[:, 0] = i  # add target image index for build_targets()
+
+    target = torch.cat(target)
+
+    return {
+        'im_file': list(im_file),
+        'ori_shape': list(ori_shape),
+        'resized_shape': list(resized_shape),
+        'img': torch.stack(image),
+        'cls': target[:, 1:2],
+        'bboxes': target[:, 2:6],
+        'batch_idx': target[:, 0]
+    }
+
+
+class YoloDataSet(Dataset):
     def __init__(self,
                  cache,
                  aug_mosaic,
@@ -50,6 +69,8 @@ class MyDataSet(Dataset):
 
     def __getitem__(self, item):
         sample = self.cache[item]
+        im_file = self.cache.image_paths[item]
+        ori_shape = list(sample['image'].shape[:2])
         sample = self.resize(**sample)
 
         if self.augment:
@@ -64,6 +85,7 @@ class MyDataSet(Dataset):
         image = ToTensorV2()(image=sample['image'])['image'].float()
         bboxes = torch.FloatTensor(sample['bboxes'])
         classes = torch.LongTensor(sample['classes'])[:, None]
+        resized_shape = list(image.shape[1:])
 
         nl = len(bboxes)
         target = torch.zeros((nl, 6))
@@ -73,7 +95,7 @@ class MyDataSet(Dataset):
             target[:, 2:4] = box[:, :2]
             target[:, 4:6] = box[:, 2:]
 
-        return image, target
+        return im_file, ori_shape, resized_shape, image, target
 
     def __len__(self):
         return len(self.cache)
@@ -127,7 +149,7 @@ def create_dataloader(path,
         rank_zero_info(f"{colorstr('albumentations: ')}" + ", ".join(
             f"{x}".replace("always_apply=False, ", "") for x in transform if x.p))
 
-    dataset = MyDataSet(
+    dataset = YoloDataSet(
         cache=cache,
         aug_mosaic=aug_mosaic,
         image_size=hyp.imgsz,
@@ -144,5 +166,5 @@ def create_dataloader(path,
                       shuffle=shuffle,
                       num_workers=nw,
                       pin_memory=PIN_MEMORY,
-                      collate_fn=detect_collate_fn,
+                      collate_fn=collate_fn,
                       persistent_workers=persistent_workers)
