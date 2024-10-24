@@ -60,7 +60,7 @@ def process_batch(detections, gt_bboxes, gt_cls, iouv):
     """
     correct = np.zeros((detections.shape[0], iouv.shape[0])).astype(bool)
     iou = box_iou(gt_bboxes, detections[:, :4])
-    correct_class = gt_cls.unsqueeze(-1) == detections[:, 5]
+    correct_class = gt_cls == detections[:, 5]
     for i in range(len(iouv)):
         x = torch.where((iou >= iouv[i]) & correct_class)  # IoU > threshold and classes match
         if x[0].shape[0]:
@@ -68,7 +68,7 @@ def process_batch(detections, gt_bboxes, gt_cls, iouv):
             if x[0].shape[0] > 1:
                 matches = matches[matches[:, 2].argsort()[::-1]]
                 matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
-                matches = matches[matches[:, 2].argsort()[::-1]]
+                # matches = matches[matches[:, 2].argsort()[::-1]]
                 matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
             correct[matches[:, 1].astype(int), i] = True
     return torch.tensor(correct, dtype=torch.bool, device=iouv.device)
@@ -186,7 +186,7 @@ class MeanAveragePrecision:
 
     def _prepare_batch(self, si, batch):
         idx = batch["batch_idx"] == si
-        cls = batch["cls"][idx].squeeze(-1)
+        cls = batch["cls"][idx]
         cls = cls if self.background else cls - 1
         bbox = batch["bboxes"][idx]
         ori_shape = batch["ori_shape"][si]
@@ -207,7 +207,7 @@ class MeanAveragePrecision:
 
             if npr == 0:
                 if nl:
-                    self.stats.append((correct, *torch.zeros((2, 0), device=self.device), cls))
+                    self.stats.append((correct, *torch.zeros((2, 0), device=self.device), cls.squeeze(-1)))
                 continue
 
             if self.single_cls:
@@ -218,7 +218,7 @@ class MeanAveragePrecision:
             if nl:
                 correct = process_batch(predn, gt_bboxes=bbox, gt_cls=cls, iouv=self.iouv)
 
-            self.stats.append((correct, pred[:, 4], pred[:, 5], cls))  # (correct, conf, pcls, tcls)
+            self.stats.append((correct, pred[:, 4], pred[:, 5], cls.squeeze(-1)))  # (correct, conf, pcls, tcls)
 
     def compute(self):
         tp, fp, p, r, f1, mp, mr, map50, ap50, map = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
