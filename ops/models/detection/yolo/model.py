@@ -51,12 +51,12 @@ class YoloModel(LightningModule):
                                         max_det=300,
                                         multi_label=False,
                                         agnostic=False)
-            self.validator.update(preds, batch)
+            self.metric.update(preds, batch)
         return loss
 
     def on_validation_epoch_end(self) -> None:
         if not self.trainer.sanity_checking:
-            seen, nt, mp, mr, map50, map = self.validator.compute()
+            seen, nt, mp, mr, map50, map = self.metric.compute()
 
             fitness = map * 0.9 + map50 * 0.1
 
@@ -69,7 +69,7 @@ class YoloModel(LightningModule):
                            'fitness_un': fitness},
                           on_epoch=True, sync_dist=True, batch_size=self.trainer.val_dataloaders.batch_size)
 
-            self.validator.reset()
+            self.metric.reset()
 
     def configure_model(self) -> None:
         m = self.head  # detection head models
@@ -88,7 +88,7 @@ class YoloModel(LightningModule):
         accumulate = max(round(nbs / batch_size), 1)
         self.hyp['weight_decay'] *= batch_size * accumulate / nbs
 
-        self.validator = MeanAveragePrecision(device=self.device, background=False)
+        self.metric = MeanAveragePrecision(device=self.device, background=False)
 
     def configure_optimizers(self):
         optimizer = smart_optimizer(self,

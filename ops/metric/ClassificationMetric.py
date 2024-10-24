@@ -14,7 +14,7 @@ class ClassificationMetric:
                             'f1-score': 0}
         self.num = 0
 
-    def add_batch(self, input, target):
+    def update(self, input, target):
         report = metrics.classification_report(target,
                                                input,
                                                output_dict=True,
