@@ -2,5 +2,5 @@ from ops.models.detection.yolo.trainer import Yolo
 
 if __name__ == '__main__':
     model = Yolo("yolov5s.yaml")
-    model.train(data="./cfg/datasets/voc.yaml", imgsz=[640, 640], epochs=200, batch=8, box=0.05)
+    model.train(data="./cfg/datasets/voc.yaml", imgsz=[640, 640], epochs=260, batch=8, box=0.05)
 
