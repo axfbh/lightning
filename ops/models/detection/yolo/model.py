@@ -51,7 +51,7 @@ class YoloModel(LightningModule):
                                         max_det=300,
                                         multi_label=False,
                                         agnostic=False)
-            self.box_map_metric.update(preds, batch)
+            self.validator.update(preds, batch)
         return loss
 
     def on_validation_epoch_end(self) -> None:
@@ -69,7 +69,7 @@ class YoloModel(LightningModule):
                            'fitness_un': fitness},
                           on_epoch=True, sync_dist=True, batch_size=self.trainer.val_dataloaders.batch_size)
 
-            self.box_map_metric.reset()
+            self.validator.reset()
 
     def configure_model(self) -> None:
         m = self.head  # detection head models
@@ -88,7 +88,7 @@ class YoloModel(LightningModule):
         accumulate = max(round(nbs / batch_size), 1)
         self.hyp['weight_decay'] *= batch_size * accumulate / nbs
 
-        self.box_map_metric = MeanAveragePrecision(device=self.device, background=False)
+        self.validator = MeanAveragePrecision(device=self.device, background=False)
 
     def configure_optimizers(self):
         optimizer = smart_optimizer(self,
