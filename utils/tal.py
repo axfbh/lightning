@@ -311,9 +311,10 @@ class TaskNearestAssigner(nn.Module):
                 None,
                 torch.zeros(1, dtype=torch.bool, device=gt_cls.device),
             )
-        # 获取真实目标的索引
+        # 获取真实目标mask（重叠）
         mask_pos, distance_metric = self.get_pos_mask(grid, gt_cxys, mask_gt)
 
+        # 获取真实目标mask、id（非重叠）
         target_gt_idx, fg_mask, mask_pos = self.select_highest_overlaps(mask_pos,
                                                                         distance_metric,
                                                                         self.n_max_boxes)
@@ -337,9 +338,10 @@ class TaskNearestAssigner(nn.Module):
         distance_deltas = self.get_box_metrics(grid, gt_cxys)
 
         distance_metric = distance_deltas.abs().sum(-1)
-        # 选取真实目标最近的k个网格
+        # 选取真实目标最近的k个网格mask
         mask_topk = self.select_topk_candidates(distance_metric, largest=False)
-        # 真实目标框的索引 = 真实目标的k个目标索引 * 非填充目标索引
+
+        # 真实目标框mask= 真实目标的k个目标mask * 非填充目标mask
         mask_pos = mask_topk * mask_gt
 
         return mask_pos, distance_metric
@@ -366,21 +368,29 @@ class TaskNearestAssigner(nn.Module):
         fg_mask = mask_pos.sum(-2)
         # 至少有一个重叠目标
         if fg_mask.max() > 1:
+            # fg_mask -> (b, 1, h*w) -> (b, n_max_boxes, h*w)
+            mask_multi_gts = (fg_mask.unsqueeze(-2) > 1).expand(-1, n_max_boxes, -1)
 
-            mask_multi_gts = (fg_mask.unsqueeze(-2) > 1).expand(-1, n_max_boxes, -1)  # (b, n_max_boxes, h*w)
-            max_overlaps_idx = overlaps.argmax(-2)  # (b,na ,h*w)
+            # 选取网格中距离最小的目标
+            max_overlaps_idx = overlaps.argmax(-2)
 
+            # (b, n_max_boxes, h*w)
             non_overlaps = torch.ones(mask_pos.shape, dtype=mask_pos.dtype, device=mask_pos.device)
+
             # 重叠位置全部置为 0
             non_overlaps[mask_multi_gts] = 0
+
             # 重叠位最大分数置置为 1
             non_overlaps.scatter_(-2, max_overlaps_idx.unsqueeze(-2), 1)
 
+            # 真实目标mask = 真实目标（非重叠）* 非填充目标 -> (b, n_max_boxes, h*w)
             mask_pos = non_overlaps * mask_pos
+
+            # 真实目标mask (b, h*w)
             fg_mask = mask_pos.sum(-2)
 
-        # Find each grid serve which gt(index)
-        target_gt_idx = mask_pos.argmax(-2)  # (b, h*w)
+        # 真实目标id (b, h*w)
+        target_gt_idx = mask_pos.argmax(-2)
         return target_gt_idx, fg_mask, mask_pos
 
     @torch.no_grad()
