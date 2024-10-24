@@ -56,7 +56,7 @@ class YoloModel(LightningModule):
 
     def on_validation_epoch_end(self) -> None:
         if not self.trainer.sanity_checking:
-            seen, nt, mp, mr, map50, map = self.box_map_metric.compute()
+            seen, nt, mp, mr, map50, map = self.validator.compute()
 
             fitness = map * 0.9 + map50 * 0.1
 
