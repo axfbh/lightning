@@ -179,7 +179,7 @@ def ap_per_class(tp, conf, pred_cls, target_cls, eps=1e-16):
     return tp, fp, p, r, f1, ap, unique_classes.astype(int)
 
 
-class MeanAveragePrecision:
+class DetectionMetric:
     def __init__(self, device, background=True, single_cls=False):
         # to count the correct predictions
         self.background = background

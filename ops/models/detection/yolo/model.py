@@ -3,7 +3,7 @@ import torch
 
 from lightning import LightningModule
 
-from ops.metric.DetectionMetric import MeanAveragePrecision
+from ops.metric.DetectionMetric import DetectionMetric
 from ops.utils.torch_utils import ModelEMA, smart_optimizer
 from ops.utils.torch_utils import one_linear
 
@@ -88,7 +88,7 @@ class YoloModel(LightningModule):
         accumulate = max(round(nbs / batch_size), 1)
         self.hyp['weight_decay'] *= batch_size * accumulate / nbs
 
-        self.metric = MeanAveragePrecision(device=self.device, background=False)
+        self.metric = DetectionMetric(device=self.device, background=False)
 
     def configure_optimizers(self):
         optimizer = smart_optimizer(self,
