@@ -102,9 +102,10 @@ class YoloLossV4To7(YoloAnchorBasedLoss):
         batch_size = feats[0].shape[0]
         imgsz = torch.tensor(batch['resized_shape'][0], device=self.device)
 
-        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"]), 1)
+        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"], batch["bboxes"]), 1)
         targets = self.preprocess(targets, batch_size)
         gt_cls, gt_cxys, gt_whs = targets.split((1, 2, 2), 2)  # cls, xyxy
+        # 非填充的目标索引
         mask_gt = gt_cxys.sum(2, keepdim=True).gt_(0)  # [b,n_box,1]
 
         for i in range(self.nl):

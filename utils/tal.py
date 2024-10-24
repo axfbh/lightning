@@ -299,13 +299,47 @@ class TaskNearestAssigner(nn.Module):
         self.topk = topk
         self.anchor_t = anchor_t
 
+    @torch.no_grad()
+    def forward(self, anc_wh, grid, gt_cls, gt_cxys, gt_whs, mask_gt):
+        self.bs = gt_cls.shape[0]
+        self.n_max_boxes = gt_cls.shape[1]
+
+        if self.n_max_boxes == 0:
+            return (
+                None,
+                None,
+                None,
+                torch.zeros(1, dtype=torch.bool, device=gt_cls.device),
+            )
+        # 获取真实目标的索引
+        mask_pos, distance_metric = self.get_pos_mask(grid, gt_cxys, mask_gt)
+
+        target_gt_idx, fg_mask, mask_pos = self.select_highest_overlaps(mask_pos,
+                                                                        distance_metric,
+                                                                        self.n_max_boxes)
+
+        target_score, target_txy, target_wh = self.get_targets(gt_cls,
+                                                               gt_cxys,
+                                                               gt_whs,
+                                                               grid,
+                                                               target_gt_idx.unsqueeze(1).expand(-1, self.na, -1))
+        anc_wh = anc_wh.view(1, self.na, 1, -1)
+        r = target_wh / anc_wh
+        mask_anc = torch.max(r, 1 / r).max(-1)[0] < self.anchor_t
+        fg_mask = fg_mask.unsqueeze(1) * mask_anc
+
+        target_box = torch.cat([target_txy, target_wh], -1)
+
+        return target_box, target_score, anc_wh, fg_mask.bool()
+
     def get_pos_mask(self, grid, gt_cxys, mask_gt):
+        # 计算真实目标中心点与网格中心点的距离
         distance_deltas = self.get_box_metrics(grid, gt_cxys)
 
         distance_metric = distance_deltas.abs().sum(-1)
-
+        # 选取真实目标最近的k个网格
         mask_topk = self.select_topk_candidates(distance_metric, largest=False)
-
+        # 真实目标框的索引 = 真实目标的k个目标索引 * 非填充目标索引
         mask_pos = mask_topk * mask_gt
 
         return mask_pos, distance_metric
@@ -327,23 +361,12 @@ class TaskNearestAssigner(nn.Module):
 
     @staticmethod
     def select_highest_overlaps(mask_pos, overlaps, n_max_boxes):
-        """
-        If an anchor box is assigned to multiple gts, the one with the highest IoU will be selected.
-
-        Args:
-            mask_pos (Tensor): shape(b, n_max_boxes, h*w)
-            overlaps (Tensor): shape(b, n_max_boxes, h*w)
-
-        Returns:
-            target_gt_idx (Tensor): shape(b, h*w)
-            fg_mask (Tensor): shape(b, h*w)
-            mask_pos (Tensor): shape(b, n_max_boxes, h*w)
-        """
         # (b, n_max_boxes, h*w) -> (b, h*w)
         # 将每个网格的bbox合并一起，统计一个网格的bbox数量
         fg_mask = mask_pos.sum(-2)
         # 至少有一个重叠目标
         if fg_mask.max() > 1:
+
             mask_multi_gts = (fg_mask.unsqueeze(-2) > 1).expand(-1, n_max_boxes, -1)  # (b, n_max_boxes, h*w)
             max_overlaps_idx = overlaps.argmax(-2)  # (b,na ,h*w)
 
