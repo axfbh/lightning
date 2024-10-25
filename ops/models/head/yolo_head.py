@@ -191,7 +191,7 @@ class YoloHeadV4(YoloHeadV4ToV7):
 
             stride = imgsz / torch.tensor([nx, ny], device=device)
 
-            grid = make_grid(ny, nx, 1, 1, imgsz).view((1, 1, ny, nx, 2)).expand(shape)
+            grid = make_grid(ny, nx, 1, 1, device).view((1, 1, ny, nx, 2)).expand(shape)
             anchor_grid = self.anchors[i].view((1, self.na, 1, 1, 2)).expand(shape)
 
             xy, wh, conf = x[i].sigmoid().split((2, 2, self.nc + 1), -1)
