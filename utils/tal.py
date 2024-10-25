@@ -318,12 +318,13 @@ class TaskNearestAssigner(nn.Module):
         target_gt_idx, fg_mask, mask_pos = self.select_highest_overlaps(mask_pos,
                                                                         distance_metric,
                                                                         self.n_max_boxes)
-
+        # 制作标签
         target_score, target_txy, target_wh = self.get_targets(gt_cls,
                                                                gt_cxys,
                                                                gt_whs,
                                                                grid,
                                                                target_gt_idx.unsqueeze(1).expand(-1, self.na, -1))
+        # 剔除anchor不符合iou要求的正样本
         anc_wh = anc_wh.view(1, self.na, 1, -1)
         r = target_wh / anc_wh
         mask_anc = torch.max(r, 1 / r).max(-1)[0] < self.anchor_t
@@ -353,9 +354,10 @@ class TaskNearestAssigner(nn.Module):
         return distance_deltas
 
     def select_topk_candidates(self, metrics, largest=True):
-        # 每个 bbox 选取网格内 topk 个正样本
+        # 每个bbox选取k个网格作为正样本
         topk_metrics, topk_idxs = torch.topk(metrics, self.topk, dim=-1, largest=largest)
 
+        # 获取每个bbox的k个网格的mask
         count_tensor = torch.zeros(metrics.shape, dtype=torch.int8, device=metrics.device)
         count_tensor.scatter_(-1, topk_idxs, 1)
 
@@ -393,52 +395,31 @@ class TaskNearestAssigner(nn.Module):
         target_gt_idx = mask_pos.argmax(-2)
         return target_gt_idx, fg_mask, mask_pos
 
-    @torch.no_grad()
-    def forward(self, anc_wh, grid, gt_cls, gt_cxys, gt_whs, mask_gt):
-        self.bs = gt_cls.shape[0]
-        self.n_max_boxes = gt_cls.shape[1]
-
-        if self.n_max_boxes == 0:
-            return (
-                None,
-                None,
-                None,
-                torch.zeros(1, dtype=torch.bool, device=gt_cls.device),
-            )
-
-        mask_pos, distance_metric = self.get_pos_mask(grid, gt_cxys, mask_gt)
-
-        target_gt_idx, fg_mask, mask_pos = self.select_highest_overlaps(mask_pos,
-                                                                        distance_metric,
-                                                                        self.n_max_boxes)
-
-        target_score, target_txy, target_wh = self.get_targets(gt_cls,
-                                                               gt_cxys,
-                                                               gt_whs,
-                                                               grid,
-                                                               target_gt_idx.unsqueeze(1).expand(-1, self.na, -1))
-        anc_wh = anc_wh.view(1, self.na, 1, -1)
-        r = target_wh / anc_wh
-        mask_anc = torch.max(r, 1 / r).max(-1)[0] < self.anchor_t
-        fg_mask = fg_mask.unsqueeze(1) * mask_anc
-
-        target_box = torch.cat([target_txy, target_wh], -1)
-
-        return target_box, target_score, anc_wh, fg_mask.bool()
-
-    def get_targets(self, gt_labels, gt_cxys, gt_whs, grid, target_gt_idx):
+    def get_targets(self, gt_cls, gt_cxys, gt_whs, grid, target_gt_idx):
         ng = grid.shape[0]
-        batch_ind = torch.arange(end=self.bs, dtype=torch.int64, device=gt_labels.device)[..., None, None]
-        target_gt_idx = target_gt_idx + batch_ind * self.n_max_boxes  # (b, h*w)
-        target_labels = gt_labels.long().flatten()[target_gt_idx]  # (b, h*w)
+        # batch idx: (b, 1, 1)
+        batch_ind = torch.arange(end=self.bs, dtype=torch.int64, device=gt_cls.device)[..., None, None]
+        # batch_ind * self.n_max_boxes: [0, 1*n, 2*n, ..., b*n]
+        # target_gt_idx + (batch_ind * self.n_max_boxes): [目标1的id设置在0...n, 目标2的id设置在n...2n,...]
+        # target_gt_idx (b, na, h*w)
+        target_gt_idx = target_gt_idx + batch_ind * self.n_max_boxes  #
+        # gt_cls: (b, n, 1) -> (b*n)
+        # target_cls:  -> (b, na, h*w)
+        target_cls = gt_cls.long().flatten()[target_gt_idx]
 
+        # gt_cxys: (b, na, n, 2) -> (b*na*n, 2)
+        # target_cxys: (b, na, h*w, 2)
         target_cxys = gt_cxys.view(-1, gt_cxys.shape[-1])[target_gt_idx]
         target_txys = target_cxys - grid
+        # gt_whs: (b, na, n, 2) -> (b*na*n, 2)
+        # target_whs: (b, na, h*w, 2)
         target_whs = gt_whs.view(-1, gt_whs.shape[-1])[target_gt_idx]
 
+        # (b, na, h*w, c)
         target_scores = torch.zeros((self.bs, self.na, ng, self.num_classes),
                                     dtype=torch.float,
-                                    device=target_labels.device)  # (b, h*w, 80)
-        target_scores.scatter_(-1, target_labels.unsqueeze(-1), 1)
+                                    device=target_cls.device)  # (b, h*w, 80)
+        # target_cls.unsqueeze(-1): (b, na, h*w,1)
+        target_scores.scatter_(-1, target_cls.unsqueeze(-1), 1)
 
         return target_scores, target_txys, target_whs
