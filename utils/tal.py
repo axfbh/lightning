@@ -311,10 +311,10 @@ class TaskNearestAssigner(nn.Module):
                 None,
                 torch.zeros(1, dtype=torch.bool, device=gt_cls.device),
             )
-        # 获取真实目标mask（重叠）
+        # 获取真实目标的mask（重叠）
         mask_pos, distance_metric = self.get_pos_mask(grid, gt_cxys, mask_gt)
 
-        # 获取真实目标mask、id（非重叠）
+        # 获取真实目标的mask、id（非重叠）
         target_gt_idx, fg_mask, mask_pos = self.select_highest_overlaps(mask_pos,
                                                                         distance_metric,
                                                                         self.n_max_boxes)
@@ -385,13 +385,13 @@ class TaskNearestAssigner(nn.Module):
             # 重叠位最大分数置置为 1
             non_overlaps.scatter_(-2, max_overlaps_idx.unsqueeze(-2), 1)
 
-            # 真实目标mask = 真实目标（非重叠）* 非填充目标 -> (b, n_max_boxes, h*w)
+            # 真实目标的mask = 真实目标（非重叠）* 非填充目标 -> (b, n_max_boxes, h*w)
             mask_pos = non_overlaps * mask_pos
 
-            # 真实目标mask (b, h*w)
+            # 真实目标的mask (b, h*w)
             fg_mask = mask_pos.sum(-2)
 
-        # 真实目标id (b, h*w)
+        # 真实目标的id (b, h*w)
         target_gt_idx = mask_pos.argmax(-2)
         return target_gt_idx, fg_mask, mask_pos
 
