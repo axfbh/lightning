@@ -12,9 +12,9 @@ from ops.models.misc.dfl import DFL
 from utils.boxes import dist2bbox
 
 
-class YoloV8Head(nn.Module):
+class YoloHeadV8(nn.Module):
     def __init__(self, in_channels_list: List, num_classes: int):
-        super(YoloV8Head, self).__init__()
+        super(YoloHeadV8, self).__init__()
 
         CBS = partial(Conv2dNormActivation, activation_layer=nn.SiLU)
 
@@ -91,9 +91,9 @@ class YoloV8Head(nn.Module):
         return dist2bbox(bboxes, anchors, xywh=True, dim=1)
 
 
-class YoloV7Head(nn.Module):
+class YoloHeadV4ToV7(nn.Module):
     def __init__(self, in_channels_list: List, anchors: List, num_classes: int):
-        super(YoloV7Head, self).__init__()
+        super(YoloHeadV4ToV7, self).__init__()
         self.nl = len(anchors)
         self.na = len(anchors[0]) // 2
         self.nc = num_classes
@@ -116,126 +116,87 @@ class YoloV7Head(nn.Module):
                 layer.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
 
     def forward(self, x: List, H, W):
-        z = []  # inference output
-        device = self.anchors.device
-        imgsze = torch.tensor([W, H], device=device)
         for i in range(self.nl):
             x[i] = self.head[i](x[i])
             bs, _, ny, nx = x[i].shape  # x(bs,75,20,20) to x(bs,3,20,20,25)
             x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
-            if not self.training:  # inference
-                shape = 1, self.na, ny, nx, 2  # grid shape
 
-                stride = imgsze / torch.tensor([nx, ny], device=device)
+        if self.training:  # Training path
+            return x
 
-                grid = make_grid(ny, nx, 1, 1, device).view((1, 1, ny, nx, 2)).expand(shape)
-                anchor_grid = self.anchors[i].view((1, self.na, 1, 1, 2)).expand(shape)
-
-                xy, wh, conf = x[i].sigmoid().split((2, 2, self.nc + 1), -1)
-                xy = (xy * 3 - 1 + grid) * stride  # xy
-                wh = (wh * 2) ** 2 * anchor_grid  # wh
-                y = torch.cat((xy, wh, conf), 4)
-
-                z.append(y.view(bs, self.na * nx * ny, self.no))
-
-        return x if self.training else (torch.cat(z, 1), x)
+        z = self._inference(x, H, W)
+        return x if self.training else (z, x)
 
 
-class YoloV5Head(nn.Module):
-    def __init__(self, in_channels_list: List, anchors: List, num_classes: int):
-        super(YoloV5Head, self).__init__()
-        self.nl = len(anchors)
-        self.na = len(anchors[0]) // 2
-        self.nc = num_classes
-        self.no = num_classes + 5
-        self.head = nn.ModuleList()
-        for in_channels in in_channels_list:
-            self.head.append(nn.Conv2d(in_channels, self.na * self.no, 1, 1, 0))
-
-        self.register_buffer("anchors", torch.tensor(anchors).float().view(self.nl, -1, 2))  # shape(nl,na,2)
-
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        stride = [8, 16, 32]
-        for layer, s in zip(self.head, stride):
-            if isinstance(layer, nn.Conv2d):
-                b = layer.bias.view(self.na, -1)
-                b.data[:, 4] += math.log(8 / (640 / s) ** 2)
-                b.data[:, 5:5 + self.nc] += math.log(0.6 / (self.nc - 0.99999))
-                layer.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
-
-    def forward(self, x: List, H, W):
+class YoloHeadV7(YoloHeadV4ToV7):
+    def _inference(self, x, H, W):
         z = []  # inference output
         device = self.anchors.device
-        imgsze = torch.tensor([W, H], device=device)
+        imgsz = torch.tensor([W, H], device=device)
+
         for i in range(self.nl):
-            x[i] = self.head[i](x[i])
-            bs, _, ny, nx = x[i].shape  # x(bs,75,20,20) to x(bs,3,20,20,25)
-            x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
-            if not self.training:  # inference
-                shape = 1, self.na, ny, nx, 2  # grid shape
+            bs, _, ny, nx, _ = x[i].shape  # x(bs,75,20,20) to x(bs,3,20,20,25)
 
-                stride = imgsze / torch.tensor([nx, ny], device=device)
+            shape = 1, self.na, ny, nx, 2  # grid shape
 
-                grid = make_grid(ny, nx, 1, 1, device).view((1, 1, ny, nx, 2)).expand(shape)
-                anchor_grid = self.anchors[i].view((1, self.na, 1, 1, 2)).expand(shape)
+            stride = imgsz / torch.tensor([nx, ny], device=device)
 
-                xy, wh, conf = x[i].sigmoid().split((2, 2, self.nc + 1), -1)
-                xy = (xy * 2 - 0.5 + grid) * stride  # xy
-                wh = (wh * 2) ** 2 * anchor_grid  # wh
-                y = torch.cat((xy, wh, conf), 4)
+            grid = make_grid(ny, nx, 1, 1, device).view((1, 1, ny, nx, 2)).expand(shape)
+            anchor_grid = self.anchors[i].view((1, self.na, 1, 1, 2)).expand(shape)
 
-                z.append(y.view(bs, self.na * nx * ny, self.no))
+            xy, wh, conf = x[i].sigmoid().split((2, 2, self.nc + 1), -1)
+            xy = (xy * 3 - 1 + grid) * stride  # xy
+            wh = (wh * 2) ** 2 * anchor_grid  # wh
+            y = torch.cat((xy, wh, conf), 4)
 
-        return x if self.training else (torch.cat(z, 1), x)
+            z.append(y.view(bs, self.na * nx * ny, self.no))
+        return torch.cat(z, 1)
 
 
-class YoloV4Head(nn.Module):
-    def __init__(self, in_channels_list: List, anchors: List, num_classes: int):
-        super(YoloV4Head, self).__init__()
-        self.nl = len(anchors)
-        self.na = len(anchors[0]) // 2
-        self.nc = num_classes
-        self.no = num_classes + 5
-        self.head = nn.ModuleList()
-        for in_channels in in_channels_list:
-            self.head.append(nn.Conv2d(in_channels, self.na * self.no, 1, 1, 0))
-
-        self.register_buffer("anchors", torch.tensor(anchors).float().view(self.nl, -1, 2))  # shape(nl,na,2)
-
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        stride = [8, 16, 32]
-        for layer, s in zip(self.head, stride):
-            if isinstance(layer, nn.Conv2d):
-                b = layer.bias.view(self.na, -1)
-                b.data[:, 4] += math.log(8 / (416 / s) ** 2)
-                b.data[:, 5:5 + self.nc] += math.log(0.6 / (self.nc - 0.99999))
-                layer.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
-
-    def forward(self, x: List, H, W):
+class YoloHeadV5(YoloHeadV4ToV7):
+    def _inference(self, x, H, W):
         z = []  # inference output
         device = self.anchors.device
-        imgsze = torch.tensor([W, H], device=device)
+        imgsz = torch.tensor([W, H], device=device)
+
         for i in range(self.nl):
-            x[i] = self.head[i](x[i])
-            bs, _, ny, nx = x[i].shape  # x(bs,75,20,20) to x(bs,3,20,20,25)
-            x[i] = x[i].view(bs, self.na, self.no, ny, nx).permute(0, 1, 3, 4, 2).contiguous()
-            if not self.training:  # inference
-                shape = 1, self.na, ny, nx, 2  # grid shape
+            bs, _, ny, nx, _ = x[i].shape  # x(bs,75,20,20) to x(bs,3,20,20,25)
+            shape = 1, self.na, ny, nx, 2  # grid shape
 
-                stride = imgsze / torch.tensor([nx, ny], device=device)
+            stride = imgsz / torch.tensor([nx, ny], device=device)
 
-                grid = make_grid(ny, nx, 1, 1, device).view((1, 1, ny, nx, 2)).expand(shape)
-                anchor_grid = self.anchors[i].view((1, self.na, 1, 1, 2)).expand(shape)
+            grid = make_grid(ny, nx, 1, 1, device).view((1, 1, ny, nx, 2)).expand(shape)
+            anchor_grid = self.anchors[i].view((1, self.na, 1, 1, 2)).expand(shape)
 
-                xy, wh, conf = x[i].split((2, 2, self.nc + 1), -1)
-                xy = (xy.sigmoid() + grid) * stride  # xy
-                wh = wh.exp() * anchor_grid  # wh
-                y = torch.cat((xy, wh, conf.sigmoid()), 4)
+            xy, wh, conf = x[i].sigmoid().split((2, 2, self.nc + 1), -1)
+            xy = (xy * 2 - 0.5 + grid) * stride  # xy
+            wh = (wh * 2) ** 2 * anchor_grid  # wh
+            y = torch.cat((xy, wh, conf), 4)
 
-                z.append(y.view(bs, self.na * nx * ny, self.no))
+            z.append(y.view(bs, self.na * nx * ny, self.no))
 
-        return x if self.training else (torch.cat(z, 1), x)
+        return torch.cat(z, 1)
+
+
+class YoloHeadV4(YoloHeadV4ToV7):
+    def _inference(self, x, H, W):
+        z = []  # inference output
+        device = self.anchors.device
+        imgsz = torch.tensor([W, H], device=device)
+
+        for i in range(self.nl):
+            bs, _, ny, nx, _ = x[i].shape  # x(bs,75,20,20) to x(bs,3,20,20,25)
+            shape = 1, self.na, ny, nx, 2  # grid shape
+
+            stride = imgsz / torch.tensor([nx, ny], device=device)
+
+            grid = make_grid(ny, nx, 1, 1, imgsz).view((1, 1, ny, nx, 2)).expand(shape)
+            anchor_grid = self.anchors[i].view((1, self.na, 1, 1, 2)).expand(shape)
+
+            xy, wh, conf = x[i].sigmoid().split((2, 2, self.nc + 1), -1)
+            xy = (xy + grid) * stride  # xy
+            wh = (wh * 2) ** 2 * anchor_grid  # wh
+            y = torch.cat((xy, wh, conf), 4)
+
+            z.append(y.view(bs, self.na * nx * ny, self.no))
+        return torch.cat(z, 1)

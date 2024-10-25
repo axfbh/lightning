@@ -30,7 +30,7 @@ class YoloAnchorBasedLoss(nn.Module):
         self.nc = m.nc
         self.no = m.no
         ids = bisect_left([1, 3, 5], topk)
-        self.alpha = [0, 2, 3][ids]
+        self.alpha = [1, 2, 3][ids]
         self.gamma = [0, 0.5, 1][ids]
 
         self.assigner = TaskNearestAssigner(anchor_t=self.hyp['anchor_t'], topk=topk, num_classes=self.nc)

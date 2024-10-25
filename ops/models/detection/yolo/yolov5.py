@@ -4,7 +4,7 @@ import torch.nn as nn
 import math
 from ops.models.backbone.cspdarknet import CSPDarknetV5, CBM, C3
 from ops.models.backbone.utils import _cspdarknet_extractor
-from ops.models.head.yolo_head import YoloV5Head
+from ops.models.head.yolo_head import YoloHeadV5
 from ops.models.detection.yolo.model import YoloModel
 from ops.loss.yolo_loss import YoloLossV4To7
 
@@ -46,7 +46,7 @@ class YoloV5(YoloModel):
         self.down_sample2 = CBM(base_channels * 8, base_channels * 8, 3, 2)
         self.conv3_for_downsample2 = C3(base_channels * 16, base_channels * 16, base_depth, shortcut=False)
 
-        self.head = YoloV5Head([base_channels * 4, base_channels * 8, base_channels * 16],
+        self.head = YoloHeadV5([base_channels * 4, base_channels * 8, base_channels * 16],
                                anchors,
                                num_classes)
 

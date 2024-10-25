@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch
 
 from ops.models.neck.spp import SPPCSPC
-from ops.models.head.yolo_head import YoloV7Head
+from ops.models.head.yolo_head import YoloHeadV7
 from ops.models.backbone.elandarknet import ElanDarkNet, CBS, MP1, Elan
 from ops.models.backbone.utils import _elandarknet_extractor
 from ops.models.detection.yolo.model import YoloModel
@@ -53,7 +53,7 @@ class YoloV7(YoloModel):
         self.rep_conv_2 = CBS(transition_channels * 8, transition_channels * 16, 3, 1)
         self.rep_conv_3 = CBS(transition_channels * 16, transition_channels * 32, 3, 1)
 
-        self.head = YoloV7Head([transition_channels * 8, transition_channels * 16, transition_channels * 32],
+        self.head = YoloHeadV7([transition_channels * 8, transition_channels * 16, transition_channels * 32],
                                anchors,
                                num_classes)
 
