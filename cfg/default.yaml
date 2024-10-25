@@ -43,8 +43,8 @@ obj_pw: 1.0
 #cls: 0.5  # cls loss gain
 #obj: 1.0  # obj loss gain (scale with pixels)
 
-# yolo v4
-#anchor_t: 0.219
+# yolo v3-v4
+#anchor_t: 4.0
 #box: 0.15  # box loss gain
 #cls: 1.5  # cls loss gain
 #obj: 3.0  # obj loss gain (scale with pixels)
