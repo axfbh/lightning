@@ -15,6 +15,8 @@ def non_max_suppression(
         labels=(),
         max_det=300,
         nm=0,  # number of masks
+        max_wh=7680,  # (pixels) maximum box width and height
+        max_nms=30000  # maximum number of boxes into torchvision.ops.nms()
 ):
     """
     Non-Maximum Suppression (NMS) on inference results to reject overlapping detections.
@@ -39,11 +41,8 @@ def non_max_suppression(
 
     # Settings
     # min_wh = 2  # (pixels) minimum box width and height
-    max_wh = 7680  # (pixels) maximum box width and height
-    max_nms = 30000  # maximum number of boxes into torchvision.ops.nms()
-    redundant = True  # require redundant detections
+
     multi_label &= nc > 1  # multiple labels per box (adds 0.5ms/img)
-    merge = False  # use merge-NMS
 
     mi = 5 + nc  # mask start index
     output = [torch.zeros((0, 6 + nm), device=prediction.device)] * bs
@@ -69,8 +68,7 @@ def non_max_suppression(
         x[:, 5:] *= x[:, 4:5]  # conf = obj_conf * cls_conf
 
         # Box/Mask
-        # box = xywh2xyxy(x[:, :4])
-        box = box_convert(x[:, :4], in_fmt='cxcywh', out_fmt='xyxy') # center_x, center_y, width, height) to (x1, y1, x2, y2)
+        box = box_convert(x[:, :4], in_fmt='cxcywh', out_fmt='xyxy')
         mask = x[:, mi:]  # zero columns if no masks
 
         # Detections matrix nx6 (xyxy, conf, cls)
@@ -85,14 +83,11 @@ def non_max_suppression(
         if classes is not None:
             x = x[(x[:, 5:6] == torch.tensor(classes, device=x.device)).any(1)]
 
-        # Apply finite constraint
-        # if not torch.isfinite(x).all():
-        #     x = x[torch.isfinite(x).all(1)]
-
         # Check shape
         n = x.shape[0]  # number of boxes
         if not n:  # no boxes
             continue
+
         x = x[x[:, 4].argsort(descending=True)[:max_nms]]  # sort by confidence and remove excess boxes
 
         # Batched NMS
@@ -100,14 +95,6 @@ def non_max_suppression(
         boxes, scores = x[:, :4] + c, x[:, 4]  # boxes (offset by class), scores
         i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
         i = i[:max_det]  # limit detections
-        if merge and (1 < n < 3e3):  # Merge NMS (boxes merged using weighted mean)
-            # update boxes as boxes(i,4) = weights(i,n) * boxes(n,4)
-            iou = bbox_iou(boxes[i], boxes) > iou_thres  # iou matrix
-            weights = iou * scores[None]  # box weights
-            x[i, :4] = torch.mm(weights, x[:, :4]).float() / weights.sum(1, keepdim=True)  # merged boxes
-            if redundant:
-                i = i[iou.sum(1) > 1]  # require redundancy
-
         output[xi] = x[i]
         if mps:
             output[xi] = output[xi].to(device)
