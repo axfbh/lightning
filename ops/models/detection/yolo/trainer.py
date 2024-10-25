@@ -46,7 +46,7 @@ class Yolo:
             'v4': partial(YoloV4, anchors=anchors, num_classes=num_classes, scales=scales),
             'v5': partial(YoloV5, anchors=anchors, num_classes=num_classes, scales=scales),
             'v7': partial(YoloV7, anchors=anchors, num_classes=num_classes, scales=scales),
-            'v8': partial(YoloV8, num_classes=num_classes, scales=scales),
+            'v8': partial(YoloV8, num_classes=num_classes + 1, scales=scales),
         }[version]
 
     def train(self,

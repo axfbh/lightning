@@ -183,7 +183,7 @@ class YoloLossV8(YoloAnchorFreeLoss):
             out[..., 1:5] = box_convert(out[..., 1:5], in_fmt='cxcywh', out_fmt='xyxy')
         return out
 
-    def forward(self, preds, targets, imgsz):
+    def forward(self, preds, batch):
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
         feats = preds[1] if isinstance(preds, tuple) else preds
         pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
@@ -195,9 +195,12 @@ class YoloLossV8(YoloAnchorFreeLoss):
 
         dtype = pred_scores.dtype
         batch_size = pred_scores.shape[0]
+        imgsz = torch.tensor(batch['resized_shape'][0], device=self.device)
+
         # make grid
         anchor_points, stride_tensor = self.make_anchors(imgsz, preds)
 
+        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"], batch["bboxes"]), 1)
         targets = self.preprocess(targets, batch_size)
         gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy
         # 非填充 bbox 样本索引 mask
