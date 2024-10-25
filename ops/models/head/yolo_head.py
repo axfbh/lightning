@@ -150,6 +150,7 @@ class YoloHeadV7(YoloHeadV4ToV7):
             y = torch.cat((xy, wh, conf), 4)
 
             z.append(y.view(bs, self.na * nx * ny, self.no))
+
         return torch.cat(z, 1)
 
 
@@ -199,4 +200,5 @@ class YoloHeadV4(YoloHeadV4ToV7):
             y = torch.cat((xy, wh, conf), 4)
 
             z.append(y.view(bs, self.na * nx * ny, self.no))
+
         return torch.cat(z, 1)
