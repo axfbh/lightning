@@ -337,8 +337,8 @@ class TaskNearestAssigner(nn.Module):
     def get_pos_mask(self, grid, gt_cxys, mask_gt):
         # 计算真实目标中心点与网格中心点的距离
         distance_deltas = self.get_box_metrics(grid, gt_cxys)
-
         distance_metric = distance_deltas.abs().sum(-1)
+
         # 选取真实目标最近的k个网格mask
         mask_topk = self.select_topk_candidates(distance_metric, largest=False)
 
