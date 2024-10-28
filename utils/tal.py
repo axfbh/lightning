@@ -165,68 +165,16 @@ class TaskAlignedAssigner(nn.Module):
         return align_metric, overlaps
 
     def select_topk_candidates(self, metrics, largest=True):
-        """
-        Select the top-k candidates based on the given metrics.
-
-        Args:
-            metrics (Tensor): A tensor of shape (b, max_num_obj, h*w), where b is the batch size,
-                              max_num_obj is the maximum number of objects, and h*w represents the
-                              total number of anchor points.
-            largest (bool): If True, select the largest values; otherwise, select the smallest values.
-            mask_gt (Tensor): 非填充的 bbox 样本索引 mask.
-
-        Returns:
-            (Tensor): A tensor of shape (b, max_num_obj, h*w) containing the selected top-k mask.
-        """
-
-        # 每个 bbox 选取网格内 topk 个正样本
+        # 每个bbox选取k个网格作为正样本
         topk_metrics, topk_idxs = torch.topk(metrics, self.topk, dim=-1, largest=largest)
 
+        # 获取每个bbox的k个网格的mask
         count_tensor = torch.zeros(metrics.shape, dtype=torch.int8, device=metrics.device)
         count_tensor.scatter_(-1, topk_idxs, 1)
-
-        # mask_topk = mask_gt.expand(-1, -1, self.topk).bool()
-
-        # 填充的 bbox 样本置为 0
-        # masked_fill_ : 不改变数组的形状，从而将索引置为 0
-        # topk_idxs.masked_fill_(~mask_topk, 0)
-
-        # count_tensor = torch.zeros(metrics.shape, dtype=torch.int8, device=mask_topk.device)
-        # ones = torch.ones_like(topk_idxs[:, :, :1], dtype=torch.int8, device=topk_idxs.device)
-
-        # # 将每个 box 放入网格位置
-        # for k in range(self.topk):
-        #     count_tensor.scatter_add_(-1, topk_idxs[:, :, k].unsqueeze(-1), ones)
-
-        # # 只有填充的 bbox 的样本，会在同一个位置多次放入，从而剔除填充 bbox 样本
-        # count_tensor.masked_fill_(65 > 1, 0)
 
         return count_tensor.to(metrics.dtype)
 
     def get_targets(self, gt_labels, gt_bboxes, target_gt_idx, fg_mask):
-        """
-        Compute target labels, target bounding boxes, and target scores for the positive anchor points.
-
-        Args:
-            gt_labels (Tensor): Ground truth labels of shape (b, max_num_obj, 1), where b is the
-                                batch size and max_num_obj is the maximum number of objects.
-            gt_bboxes (Tensor): Ground truth bounding boxes of shape (b, max_num_obj, 4).
-            target_gt_idx (Tensor): Indices of the assigned ground truth objects for positive
-                                    anchor points, with shape (b, h*w), where h*w is the total
-                                    number of anchor points.
-            fg_mask (Tensor): A boolean tensor of shape (b, h*w) indicating the positive
-                              (foreground) anchor points.
-
-        Returns:
-            (Tuple[Tensor, Tensor, Tensor]): A tuple containing the following tensors:
-                - target_labels (Tensor): Shape (b, h*w), containing the target labels for
-                                          positive anchor points.
-                - target_bboxes (Tensor): Shape (b, h*w, 4), containing the target bounding boxes
-                                          for positive anchor points.
-                - target_scores (Tensor): Shape (b, h*w, num_classes), containing the target scores
-                                          for positive anchor points, where num_classes is the number
-                                          of object classes.
-        """
 
         # Assigned target labels, (b, 1)
         batch_ind = torch.arange(end=self.bs, dtype=torch.int64, device=gt_labels.device)[..., None]
@@ -240,11 +188,9 @@ class TaskAlignedAssigner(nn.Module):
         target_labels.clamp_(0)
 
         # 10x faster than F.one_hot()
-        target_scores = torch.zeros(
-            (target_labels.shape[0], target_labels.shape[1], self.num_classes),
-            dtype=torch.int64,
-            device=target_labels.device,
-        )  # (b, h*w, 80)
+        target_scores = torch.zeros((self.bs, target_labels.shape[1], self.num_classes),
+                                    dtype=torch.int64,
+                                    device=target_labels.device)  # (b, h*w, 80)
         target_scores.scatter_(2, target_labels.unsqueeze(-1), 1)
 
         fg_scores_mask = fg_mask[:, :, None].repeat(1, 1, self.num_classes)  # (b, h*w, 80)
@@ -300,16 +246,16 @@ class TaskNearestAssigner(nn.Module):
         self.anchor_t = anchor_t
 
     @torch.no_grad()
-    def forward(self, anc_wh, grid, gt_cls, gt_cxys, gt_whs, mask_gt):
-        self.bs = gt_cls.shape[0]
-        self.n_max_boxes = gt_cls.shape[1]
+    def forward(self, anc_wh, grid, gt_labels, gt_cxys, gt_whs, mask_gt):
+        self.bs = gt_labels.shape[0]
+        self.n_max_boxes = gt_labels.shape[1]
 
         if self.n_max_boxes == 0:
             return (
                 None,
                 None,
                 None,
-                torch.zeros(1, dtype=torch.bool, device=gt_cls.device),
+                torch.zeros(1, dtype=torch.bool, device=gt_labels.device),
             )
         # 获取真实目标的mask（重叠）
         mask_pos, distance_metric = self.get_pos_mask(grid, gt_cxys, mask_gt)
@@ -319,20 +265,20 @@ class TaskNearestAssigner(nn.Module):
                                                                         distance_metric,
                                                                         self.n_max_boxes)
         # 制作标签
-        target_score, target_txy, target_wh = self.get_targets(gt_cls,
-                                                               gt_cxys,
-                                                               gt_whs,
-                                                               grid,
-                                                               target_gt_idx.unsqueeze(1).expand(-1, self.na, -1))
+        target_txy, target_wh, target_scores = self.get_targets(gt_labels,
+                                                                gt_cxys,
+                                                                gt_whs,
+                                                                grid,
+                                                                target_gt_idx.unsqueeze(1).expand(-1, self.na, -1))
         # 剔除anchor不符合iou要求的正样本
         anc_wh = anc_wh.view(1, self.na, 1, -1)
         r = target_wh / anc_wh
         mask_anc = torch.max(r, 1 / r).max(-1)[0] < self.anchor_t
         fg_mask = fg_mask.unsqueeze(1) * mask_anc
 
-        target_box = torch.cat([target_txy, target_wh], -1)
+        target_bboxes = torch.cat([target_txy, target_wh], -1)
 
-        return target_box, target_score, anc_wh, fg_mask.bool()
+        return target_bboxes, target_scores, anc_wh, fg_mask.bool()
 
     def get_pos_mask(self, grid, gt_cxys, mask_gt):
         # 计算真实目标中心点与网格中心点的距离
@@ -395,19 +341,19 @@ class TaskNearestAssigner(nn.Module):
         target_gt_idx = mask_pos.argmax(-2)
         return target_gt_idx, fg_mask, mask_pos
 
-    def get_targets(self, gt_cls, gt_cxys, gt_whs, grid, target_gt_idx):
+    def get_targets(self, gt_labels, gt_cxys, gt_whs, grid, target_gt_idx):
         ng = grid.shape[0]
         # batch idx: (b, 1, 1)
-        batch_ind = torch.arange(end=self.bs, dtype=torch.int64, device=gt_cls.device)[..., None, None]
+        batch_ind = torch.arange(end=self.bs, dtype=torch.int64, device=gt_labels.device)[..., None, None]
         # batch_ind * self.n_max_boxes: [0, 1*n, 2*n, ..., b*n]
         # target_gt_idx + (batch_ind * self.n_max_boxes):
         # 图1[目标1的id设置在0, ..., 目标n的id设置在n-1]
         # 图2[目标1的id设置在n, ..., 目标n的id设置在2n]
         # target_gt_idx (b, na, h*w)
         target_gt_idx = target_gt_idx + batch_ind * self.n_max_boxes  #
-        # gt_cls: (b, n, 1) -> (b*n)
-        # target_cls: (b, na, h*w)
-        target_cls = gt_cls.long().flatten()[target_gt_idx]
+        # gt_labels: (b, n, 1) -> (b*n)
+        # target_labels: (b, na, h*w)
+        target_labels = gt_labels.long().flatten()[target_gt_idx]
 
         # gt_cxys: (b, na, n, 2) -> (b*na*n, 2)
         # target_cxys: (b, na, h*w, 2)
@@ -420,8 +366,8 @@ class TaskNearestAssigner(nn.Module):
         # target_scores: (b, na, h*w, c)
         target_scores = torch.zeros((self.bs, self.na, ng, self.num_classes),
                                     dtype=torch.float,
-                                    device=target_cls.device)  # (b, h*w, 80)
-        # target_cls.unsqueeze(-1): (b, na, h*w,1)
-        target_scores.scatter_(-1, target_cls.unsqueeze(-1), 1)
+                                    device=target_labels.device)  # (b, h*w, 80)
+        # target_labels.unsqueeze(-1): (b, na, h*w,1)
+        target_scores.scatter_(-1, target_labels.unsqueeze(-1), 1)
 
-        return target_scores, target_txys, target_whs
+        return target_txys, target_whs, target_scores
