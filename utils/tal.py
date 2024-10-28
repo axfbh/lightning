@@ -365,18 +365,18 @@ class TaskNearestAssigner(nn.Module):
 
     @staticmethod
     def select_highest_overlaps(mask_pos, overlaps, n_max_boxes):
-        # (b, n_max_boxes, h*w) -> (b, h*w)
+        # mask_pos: (b, n_max_boxes, h*w) -> (b, h*w)
         # 将每个网格的bbox合并一起，统计一个网格的bbox数量
         fg_mask = mask_pos.sum(-2)
         # 至少有一个重叠目标
         if fg_mask.max() > 1:
-            # fg_mask -> (b, 1, h*w) -> (b, n_max_boxes, h*w)
+            # fg_mask: (b, 1, h*w) -> (b, n_max_boxes, h*w)
             mask_multi_gts = (fg_mask.unsqueeze(-2) > 1).expand(-1, n_max_boxes, -1)
 
             # 选取网格中距离最小的目标
             max_overlaps_idx = overlaps.argmax(-2)
 
-            # (b, n_max_boxes, h*w)
+            # non_overlaps: (b, n_max_boxes, h*w)
             non_overlaps = torch.ones(mask_pos.shape, dtype=mask_pos.dtype, device=mask_pos.device)
 
             # 重叠位置全部置为 0
@@ -400,11 +400,13 @@ class TaskNearestAssigner(nn.Module):
         # batch idx: (b, 1, 1)
         batch_ind = torch.arange(end=self.bs, dtype=torch.int64, device=gt_cls.device)[..., None, None]
         # batch_ind * self.n_max_boxes: [0, 1*n, 2*n, ..., b*n]
-        # target_gt_idx + (batch_ind * self.n_max_boxes): [目标1的id设置在0...n, 目标2的id设置在n...2n,...]
+        # target_gt_idx + (batch_ind * self.n_max_boxes):
+        # 图1[目标1的id设置在0, ..., 目标n的id设置在n-1]
+        # 图2[目标1的id设置在n, ..., 目标n的id设置在2n]
         # target_gt_idx (b, na, h*w)
         target_gt_idx = target_gt_idx + batch_ind * self.n_max_boxes  #
         # gt_cls: (b, n, 1) -> (b*n)
-        # target_cls:  -> (b, na, h*w)
+        # target_cls: (b, na, h*w)
         target_cls = gt_cls.long().flatten()[target_gt_idx]
 
         # gt_cxys: (b, na, n, 2) -> (b*na*n, 2)
@@ -415,7 +417,7 @@ class TaskNearestAssigner(nn.Module):
         # target_whs: (b, na, h*w, 2)
         target_whs = gt_whs.view(-1, gt_whs.shape[-1])[target_gt_idx]
 
-        # (b, na, h*w, c)
+        # target_scores: (b, na, h*w, c)
         target_scores = torch.zeros((self.bs, self.na, ng, self.num_classes),
                                     dtype=torch.float,
                                     device=target_cls.device)  # (b, h*w, 80)
