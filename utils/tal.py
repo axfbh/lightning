@@ -39,7 +39,6 @@ class TaskAlignedAssigner(nn.Module):
     def forward(self, pd_scores, pd_bboxes, anc_points, gt_labels, gt_bboxes, mask_gt):
         """
         Compute the task-aligned assignment. Reference code is available at
-        https://github.com/Nioolek/PPYOLOE_pytorch/blob/master/ppyoloe/assigner/tal_assigner.py.
 
         Args:
             pd_scores (Tensor): shape(bs, num_total_anchors, num_classes)
@@ -69,6 +68,7 @@ class TaskAlignedAssigner(nn.Module):
                 torch.zeros_like(pd_scores[..., 0]).to(device),
             )
 
+        # 获取真实目标的mask（重叠）
         mask_pos, align_metric, overlaps = self.get_pos_mask(
             pd_scores, pd_bboxes, gt_labels, gt_bboxes, anc_points, mask_gt
         )
