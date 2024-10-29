@@ -341,7 +341,7 @@ class TaskNearestAssigner(nn.Module):
             mask_multi_gts = (fg_mask.unsqueeze(-2) > 1).expand(-1, n_max_boxes, -1)
 
             # 选取网格中距离最小的目标
-            max_overlaps_idx = overlaps.argmin(-2)
+            min_overlaps_idx = overlaps.argmin(-2)
 
             # non_overlaps: (b, n_max_boxes, h*w)
             non_overlaps = torch.ones(mask_pos.shape, dtype=mask_pos.dtype, device=mask_pos.device)
@@ -350,7 +350,7 @@ class TaskNearestAssigner(nn.Module):
             non_overlaps[mask_multi_gts] = 0
 
             # 重叠网格最大分数置置为 1
-            non_overlaps.scatter_(-2, max_overlaps_idx.unsqueeze(-2), 1)
+            non_overlaps.scatter_(-2, min_overlaps_idx.unsqueeze(-2), 1)
 
             # 真实目标的mask = 真实目标（非重叠）* 非填充目标 -> (b, n_max_boxes, h*w)
             mask_pos = non_overlaps * mask_pos
