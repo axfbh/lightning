@@ -113,7 +113,7 @@ class YoloLossV4To7(YoloAnchorBasedLoss):
 
             stride = (imgsz / ng)[[1, 0]]
 
-            target_box, target_score, anc_wh, fg_mask = self.assigner(
+            target_bboxes, target_scores, anc_wh, fg_mask = self.assigner(
                 self.anchors[i] / stride,
                 make_grid(*ng, device=self.device),
                 gt_cls,
@@ -122,15 +122,15 @@ class YoloLossV4To7(YoloAnchorBasedLoss):
                 mask_gt
             )
 
-            pred_box, pred_obj, pred_score = preds[i]
+            pred_bboxes, pred_obj, pred_scores = preds[i]
 
             target_obj = torch.zeros_like(pred_obj)
 
             if fg_mask.any() > 0:
-                pxy = pred_box[..., :2].sigmoid() * self.alpha - self.gamma
-                pwh = (pred_box[..., 2:].sigmoid() * 2) ** 2 * anc_wh
-                pred_box = torch.cat([pxy, pwh], -1)
-                iou = iou_loss(pred_box[fg_mask], target_box[fg_mask], in_fmt='cxcywh', CIoU=True)
+                pxy = pred_bboxes[..., :2].sigmoid() * self.alpha - self.gamma
+                pwh = (pred_bboxes[..., 2:].sigmoid() * 2) ** 2 * anc_wh
+                pred_bboxes = torch.cat([pxy, pwh], -1)
+                iou = iou_loss(pred_bboxes[fg_mask], target_bboxes[fg_mask], in_fmt='cxcywh', CIoU=True)
 
                 loss[0] += (1.0 - iou).mean()
 
@@ -138,7 +138,7 @@ class YoloLossV4To7(YoloAnchorBasedLoss):
                 target_obj[fg_mask] = iou[:, None]  # iou ratio
 
                 if self.nc > 1:
-                    loss[2] += self.BCEcls(pred_score[fg_mask], target_score[fg_mask])
+                    loss[2] += self.BCEcls(pred_scores[fg_mask], target_scores[fg_mask])
 
             obji = self.BCEobj(pred_obj, target_obj)
             loss[1] += obji * self.balance[i]  # obj loss
