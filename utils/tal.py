@@ -286,18 +286,18 @@ class TaskNearestAssigner(nn.Module):
                                                                         distance_metric,
                                                                         self.n_max_boxes)
         # 制作标签
-        target_txy, target_wh, target_scores = self.get_targets(gt_labels,
-                                                                gt_cxys,
-                                                                gt_whs,
-                                                                grid,
-                                                                target_gt_idx.unsqueeze(1).expand(-1, self.na, -1))
+        target_txys, target_whs, target_scores = self.get_targets(gt_labels,
+                                                                  gt_cxys,
+                                                                  gt_whs,
+                                                                  grid,
+                                                                  target_gt_idx.unsqueeze(1).expand(-1, self.na, -1))
         # 剔除anchor不符合iou要求的正样本
         anc_wh = anc_wh.view(1, self.na, 1, -1)
-        r = target_wh / anc_wh
+        r = target_whs / anc_wh
         mask_anc = torch.max(r, 1 / r).max(-1)[0] < self.anchor_t
         fg_mask = fg_mask.unsqueeze(1) * mask_anc
 
-        target_bboxes = torch.cat([target_txy, target_wh], -1)
+        target_bboxes = torch.cat([target_txys, target_whs], -1)
 
         return target_bboxes, target_scores, anc_wh, fg_mask.bool()
 
@@ -371,7 +371,7 @@ class TaskNearestAssigner(nn.Module):
         # 图1[目标1的id设置在0, ..., 目标n的id设置在n-1]
         # 图2[目标1的id设置在n, ..., 目标n的id设置在2n]
         # target_gt_idx (b, na, h*w)
-        target_gt_idx = target_gt_idx + batch_ind * self.n_max_boxes  #
+        target_gt_idx = target_gt_idx + batch_ind * self.n_max_boxes
         # gt_labels: (b, n, 1) -> (b*n)
         # target_labels: (b, na, h*w)
         target_labels = gt_labels.long().flatten()[target_gt_idx]
