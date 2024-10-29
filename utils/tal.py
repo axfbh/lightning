@@ -54,21 +54,34 @@ class TaskAlignedAssigner(nn.Module):
                 torch.zeros_like(pd_scores[..., 0]).to(device),
             )
 
-        # 获取真实目标的mask（重叠），通过分类分数，寻找 topk 个正样本
+        # 获取真实目标的mask（重叠），通过分类分数和预测框iou，寻找 topk 个正样本
         mask_pos, align_metric, overlaps = self.get_pos_mask(
             pd_scores, pd_bboxes, gt_labels, gt_bboxes, anc_points, mask_gt
         )
 
         # 获取真实目标的mask、id（非重叠），通过iou，剔除网格重叠样本
+        # mask_pos: 样本（重叠）mask
+        # fg_mask: 样本（非重叠）mask
         target_gt_idx, fg_mask, mask_pos = self.select_highest_overlaps(mask_pos, overlaps, self.n_max_boxes)
 
-        # Assigned target
+        # 制作标签
         target_labels, target_bboxes, target_scores = self.get_targets(gt_labels, gt_bboxes, target_gt_idx, fg_mask)
 
         # Normalize
+        # align_metric 根据 mask 剔除, 未被选中为 k 个正样本的样本
+        # align_metric (b,n_max_boxes,h*w)
         align_metric *= mask_pos
+        # pos_align_metrics, 寻找k个样本中，预测框分数最好的
+        # pos_align_metrics: (b,n_max_boxes)
         pos_align_metrics = align_metric.amax(dim=-1, keepdim=True)  # b, max_num_obj
+        # pos_overlaps: (overlaps * mask_pos) 根据 mask 剔除 未被选中为 k 个正样本的样本,
+        # amaxa: 寻找k个样本中，iou分数最好的
+        # pos_overlaps: (b,n_max_boxes)
         pos_overlaps = (overlaps * mask_pos).amax(dim=-1, keepdim=True)  # b, max_num_obj
+        # 归一次公式
+        # overlaps : iou 最好的时候为 1
+        # pos_align_metrics : 为 align_metric 最好的分数
+        # 当 align_metric == pos_align_metrics，且 iou 为 1，那么 norm_align_metric = 1，即预测框已经预测的很好了
         norm_align_metric = (align_metric * pos_overlaps / (pos_align_metrics + self.eps)).amax(-2).unsqueeze(-1)
         target_scores = target_scores * norm_align_metric
 
@@ -136,7 +149,7 @@ class TaskAlignedAssigner(nn.Module):
         # 1. pd_scores[ind[0], :, ind[1]] : 保留第二维度
         # 2. ind[0] 扩展第一维度成(b, n_max_boxes)
         # 3. ind[1] 的值，遍历 pd_scores 第三维度，ind[1].shape == ind[0].shape
-        # 类别的分数，作为预测框的分数
+        # 类别的分数，作为预测框的分数之一
         bbox_scores[mask_gt] = pd_scores[ind[0], :, ind[1]][mask_gt]  # b, max_num_obj, h*w
 
         # pd_boxes.unsqueeze(1): (b, 1, n_anchors, 4)
@@ -150,7 +163,7 @@ class TaskAlignedAssigner(nn.Module):
         # 将计算好的 iou 存入对应位置
         overlaps[mask_gt] = self.iou_calculation(gt_boxes, pd_boxes)
 
-        # 预测框的分数，根据类别的分数
+        # 预测框的分数，根据类别的分数和框iou分数
         align_metric = bbox_scores.pow(self.alpha) * overlaps.pow(self.beta)
         return align_metric, overlaps
 
@@ -166,25 +179,35 @@ class TaskAlignedAssigner(nn.Module):
 
     def get_targets(self, gt_labels, gt_bboxes, target_gt_idx, fg_mask):
 
-        # Assigned target labels, (b, 1)
+        # batch idx: (b, 1)
         batch_ind = torch.arange(end=self.bs, dtype=torch.int64, device=gt_labels.device)[..., None]
+        # batch_ind * self.n_max_boxes: [0, 1*n, 2*n, ..., b*n]
+        # target_gt_idx + (batch_ind * self.n_max_boxes):
+        # 图1[目标1的id设置在0, ..., 目标n的id设置在n-1]
+        # 图2[目标1的id设置在n, ..., 目标n的id设置在2n]
+        # target_gt_idx (b, h*w)
         target_gt_idx = target_gt_idx + batch_ind * self.n_max_boxes  # (b, h*w)
+        # gt_labels: (b, n, 1) -> (b*n)
+        # target_labels: (b,h*w)
         target_labels = gt_labels.long().flatten()[target_gt_idx]  # (b, h*w)
 
-        # Assigned target boxes, (b, max_num_obj, 4) -> (b, h*w, 4)
+        # target_bboxes: (b, n, 2) -> (b*n, 2)
+        # target_bboxes: (b, h*w, 2)
         target_bboxes = gt_bboxes.view(-1, gt_bboxes.shape[-1])[target_gt_idx]
 
         # Assigned target scores
         target_labels.clamp_(0)
 
-        # 10x faster than F.one_hot()
+        #  target_scores: (b, h*w, c), One-Hot
         target_scores = torch.zeros((self.bs, target_labels.shape[1], self.num_classes),
                                     dtype=torch.int64,
                                     device=target_labels.device)  # (b, h*w, 80)
         target_scores.scatter_(2, target_labels.unsqueeze(-1), 1)
 
-        fg_scores_mask = fg_mask[:, :, None].repeat(1, 1, self.num_classes)  # (b, h*w, 80)
-        target_scores = torch.where(fg_scores_mask > 0, target_scores, 0)
+        # 根据mask剔除没有样本的target_scores
+        target_scores[~fg_mask.bool()] = 0
+        # fg_scores_mask = fg_mask[:, :, None].repeat(1, 1, self.num_classes)  # (b, h*w, 80)
+        # target_scores = torch.where(fg_scores_mask > 0, target_scores, 0)
 
         return target_labels, target_bboxes, target_scores
 
@@ -207,10 +230,10 @@ class TaskAlignedAssigner(nn.Module):
             # non_overlaps: (b, n_max_boxes, h*w)
             non_overlaps = torch.ones(mask_pos.shape, dtype=mask_pos.dtype, device=mask_pos.device)
 
-            # 重叠位置全部置为 0
+            # 重叠网格全部置为 0
             non_overlaps[mask_multi_gts] = 0
 
-            # 重叠位置最大分数置置为 1
+            # 重叠网格最大分数置置为 1
             non_overlaps.scatter_(1, max_overlaps_idx.unsqueeze(1), 1)
 
             # 真实样本的mask = 真实样本（非重叠）* 非填充样本 -> (b, n_max_boxes, h*w)
@@ -248,6 +271,8 @@ class TaskNearestAssigner(nn.Module):
         mask_pos, distance_metric = self.get_pos_mask(grid, gt_cxys, mask_gt)
 
         # 获取真实目标的mask、id（非重叠）
+        # mask_pos: 样本（重叠）mask
+        # fg_mask: 样本（非重叠）mask
         target_gt_idx, fg_mask, mask_pos = self.select_highest_overlaps(mask_pos,
                                                                         distance_metric,
                                                                         self.n_max_boxes)
@@ -312,10 +337,10 @@ class TaskNearestAssigner(nn.Module):
             # non_overlaps: (b, n_max_boxes, h*w)
             non_overlaps = torch.ones(mask_pos.shape, dtype=mask_pos.dtype, device=mask_pos.device)
 
-            # 重叠位置全部置为 0
+            # 重叠网格全部置为 0
             non_overlaps[mask_multi_gts] = 0
 
-            # 重叠位最大分数置置为 1
+            # 重叠网格最大分数置置为 1
             non_overlaps.scatter_(-2, max_overlaps_idx.unsqueeze(-2), 1)
 
             # 真实目标的mask = 真实目标（非重叠）* 非填充目标 -> (b, n_max_boxes, h*w)
@@ -350,7 +375,7 @@ class TaskNearestAssigner(nn.Module):
         # target_whs: (b, na, h*w, 2)
         target_whs = gt_whs.view(-1, gt_whs.shape[-1])[target_gt_idx]
 
-        # target_scores: (b, na, h*w, c)
+        # target_scores: (b, na, h*w, c), One-Hot
         target_scores = torch.zeros((self.bs, self.na, ng, self.num_classes),
                                     dtype=torch.float,
                                     device=target_labels.device)  # (b, h*w, 80)
