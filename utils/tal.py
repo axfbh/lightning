@@ -45,23 +45,31 @@ class TaskAlignedAssigner(nn.Module):
         self.n_max_boxes = gt_bboxes.shape[1]
 
         if self.n_max_boxes == 0:
-            device = gt_bboxes.device
+            # device = gt_bboxes.device
+            # return (
+            #     torch.full_like(pd_scores[..., 0], self.bg_idx).to(device),
+            #     torch.zeros_like(pd_bboxes).to(device),
+            #     torch.zeros_like(pd_scores).to(device),
+            #     torch.zeros_like(pd_scores[..., 0]).to(device),
+            #     torch.zeros_like(pd_scores[..., 0]).to(device),
+            # )
             return (
-                torch.full_like(pd_scores[..., 0], self.bg_idx).to(device),
-                torch.zeros_like(pd_bboxes).to(device),
-                torch.zeros_like(pd_scores).to(device),
-                torch.zeros_like(pd_scores[..., 0]).to(device),
-                torch.zeros_like(pd_scores[..., 0]).to(device),
+                None,
+                None,
+                torch.zeros(1, dtype=torch.bool, device=gt_labels.device),
+                torch.zeros(1, dtype=torch.bool, device=gt_labels.device),
+                None,
             )
 
         # 获取真实目标的mask（重叠），通过分类分数和预测框iou，寻找 topk 个正样本
+        # mask_pos: 样本（重叠）mask
         mask_pos, align_metric, overlaps = self.get_pos_mask(
             pd_scores, pd_bboxes, gt_labels, gt_bboxes, anc_points, mask_gt
         )
 
         # 获取真实目标的mask、id（非重叠），通过iou，剔除网格重叠样本
-        # mask_pos: 样本（重叠）mask
-        # fg_mask: 样本（非重叠）mask
+        # mask_pos: 样本（非重叠）mask (b, n_max_box, h*w)
+        # fg_mask: 样本（非重叠）mask (b, h*w)
         target_gt_idx, fg_mask, mask_pos = self.select_highest_overlaps(mask_pos, overlaps, self.n_max_boxes)
 
         # 制作标签
@@ -268,11 +276,12 @@ class TaskNearestAssigner(nn.Module):
                 torch.zeros(1, dtype=torch.bool, device=gt_labels.device),
             )
         # 获取真实目标的mask（重叠）
+        # mask_pos: 样本（重叠）mask
         mask_pos, distance_metric = self.get_pos_mask(grid, gt_cxys, mask_gt)
 
         # 获取真实目标的mask、id（非重叠）
-        # mask_pos: 样本（重叠）mask
-        # fg_mask: 样本（非重叠）mask
+        # mask_pos: 样本（非重叠）mask (b, n_max_box, h*w)
+        # fg_mask: 样本（非重叠）mask (b, h*w)
         target_gt_idx, fg_mask, mask_pos = self.select_highest_overlaps(mask_pos,
                                                                         distance_metric,
                                                                         self.n_max_boxes)
