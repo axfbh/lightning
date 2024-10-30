@@ -12,8 +12,11 @@ class DFL(nn.Module):
     def __init__(self, c1=16):
         """Initialize a convolutional layer with a given number of input channels."""
         super().__init__()
+        # 不传播
         self.conv = nn.Conv2d(c1, 1, 1, bias=False).requires_grad_(False)
+        # [0,1,...,15]
         x = torch.arange(c1, dtype=torch.float)
+        # 将权值替换成 [0,1,...,15]
         self.conv.weight.data[:] = nn.Parameter(x.view(1, c1, 1, 1))
         self.c1 = c1
 

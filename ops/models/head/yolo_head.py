@@ -18,12 +18,19 @@ class YoloHeadV8(nn.Module):
 
         CBS = partial(Conv2dNormActivation, activation_layer=nn.SiLU)
 
-        self.nc = num_classes  # number of classes
-        self.nl = len(in_channels_list)  # number of detection layers
-        self.reg_max = 16  # DFL channels (ch[0] // 16 to scale 4/8/12/16/20 for n/s/m/l/x)
+        # number of classes
+        self.nc = num_classes
+        # number of detection layers
+        self.nl = len(in_channels_list)
+        # DFL channels (ch[0] // 16 to scale 4/8/12/16/20 for n/s/m/l/x)
+        self.reg_max = 16
+        # number of channel of (classes + dfl)
         self.no = num_classes + self.reg_max * 4
-        c2 = max(16, in_channels_list[0] // 4, self.reg_max * 4)  # number of outputs per anchor
-        c3 = max(in_channels_list[0], min(self.nc, 100))  # channels
+        # 坐标头的中间通道数
+        c2 = max(16, in_channels_list[0] // 4, self.reg_max * 4)
+        # 分类头的中间通道数
+        c3 = max(in_channels_list[0], min(self.nc, 100))
+        # 解耦头
         self.reg_head = nn.ModuleList()
         for in_channels in in_channels_list:
             self.reg_head.append(
@@ -43,10 +50,9 @@ class YoloHeadV8(nn.Module):
                 )
             )
 
-        self.anchor = AnchorGenerator([0, 0, 0], [1, 1, 1])
         self.dfl = DFL(self.reg_max) if self.reg_max > 1 else nn.Identity()
 
-        self.anchors = AnchorGenerator([0, 0, 0], [1, 1, 1])
+        self.anchors = AnchorGenerator((0, 0, 0), (1,))
 
         self.reset_parameters()
 
@@ -58,26 +64,33 @@ class YoloHeadV8(nn.Module):
             a[-1].bias.data[:] = 1.0  # box
             b[-1].bias.data[: m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
 
-    def forward(self, x: List, H, W):
-        imgsze = torch.tensor([H, W], device=x[0].device)
-
-        anchor_points, stride_tensor = (x.transpose(0, 1) for x in self.make_anchors(imgsze, x))
-
-        for i in range(self.nl):
-            x[i] = torch.cat((self.reg_head[i](x[i]), self.cls_head[i](x[i])), 1)
-        if self.training:  # Training path
-            return x
-
+    def _inference(self, x, anchor_points, stride_tensor):
         shape = x[0].shape  # BCHW
         x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
         box, cls = x_cat.split((self.reg_max * 4, self.nc), 1)
         dbox = self.decode_bboxes(self.dfl(box), anchor_points.unsqueeze(0)) * stride_tensor.repeat(2, 1)
         y = torch.cat((dbox, cls.sigmoid()), 1)
+        return y
 
-        return x if self.training else (y, x)
+    def forward(self, x: List, H, W):
+        imgsz = torch.tensor([H, W], device=x[0].device)
+
+        anchor_points, stride_tensor = (x.transpose(0, 1) for x in self.make_anchors(imgsz, x))
+
+        for i in range(self.nl):
+            x[i] = torch.cat((self.reg_head[i](x[i]), self.cls_head[i](x[i])), 1)
+
+        if self.training:  # Training path
+            return x
+
+        y = self._inference(x, anchor_points, stride_tensor)
+        return y, x
 
     def make_anchors(self, image_size, preds, offset=0.5):
+        # anchors : 每个尺度的[候选框左上角xy,候选框右上角xy]
+        # strides : 候选框的缩放尺度
         anchors, strides = self.anchors(image_size, preds)
+        # 候选框的中心点计算和尺度缩放
         for i in range(len(anchors)):
             anchors[i] = (anchors[i][..., :2] + anchors[i][..., 2:]) / 2
             anchors[i] = anchors[i] / strides[i] + offset
@@ -87,7 +100,7 @@ class YoloHeadV8(nn.Module):
         return anchor_points, strides
 
     def decode_bboxes(self, bboxes, anchors):
-        """Decode bounding boxes."""
+        # 构建预测框 = 候选框中心点 + 预测框（左上右下）长度
         return dist2bbox(bboxes, anchors, xywh=True, dim=1)
 
 
@@ -125,7 +138,7 @@ class YoloHeadV4ToV7(nn.Module):
             return x
 
         z = self._inference(x, H, W)
-        return x if self.training else (z, x)
+        return z, x
 
 
 class YoloHeadV7(YoloHeadV4ToV7):
