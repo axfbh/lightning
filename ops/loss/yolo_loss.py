@@ -253,6 +253,7 @@ class BboxLoss(nn.Module):
 
         # DFL loss
         if self.use_dfl:
+            # reg_max 用于限制 target_ltrb 的长度到 reg_max
             target_ltrb = bbox2dist(anchor_points, target_bboxes, self.reg_max)
             loss_dfl = self._df_loss(pred_dist[fg_mask].view(-1, self.reg_max + 1), target_ltrb[fg_mask]) * weight
             loss_dfl = loss_dfl.sum() / target_scores_sum
