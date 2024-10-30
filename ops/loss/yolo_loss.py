@@ -154,8 +154,11 @@ class YoloLossV8(YoloAnchorFreeLoss):
 
     def bbox_decode(self, anchor_points, pred_dist):
         """Decode predicted object bounding box coordinates from anchor points and distribution."""
+        # 不使用 dfl ，就是回归 4 个值
         if self.use_dfl:
             b, a, c = pred_dist.shape  # batch, anchors, channels
+            # pred_dist.dot([0,1,...,15])
+            # pred_dist[0] * 0 + ... + pred_dist[15] * 15
             pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_dist.dtype))
         return dist2bbox(pred_dist, anchor_points, xywh=False)
 
