@@ -200,7 +200,8 @@ class YoloLossV8(YoloAnchorFreeLoss):
         batch_size = pred_scores.shape[0]
         imgsz = torch.tensor(batch['resized_shape'][0], device=self.device)
 
-        # make grid
+        # anchor_points：候选框中心点
+        # stride_tensor：缩放尺度
         anchor_points, stride_tensor = self.make_anchors(imgsz, preds)
 
         targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"], batch["bboxes"]), 1)
