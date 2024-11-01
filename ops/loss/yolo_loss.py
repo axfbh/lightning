@@ -89,6 +89,7 @@ class YoloLossV4To7(YoloAnchorBasedLoss):
                 n = matches.sum()
                 # 将 target 填入矩阵中。
                 if n:
+                    # cls - 1, 剔除背景标签影响
                     out[j, :n] = targets[matches, 1:] - torch.tensor([1, 0, 0, 0, 0], device=targets.device)
         return out
 
