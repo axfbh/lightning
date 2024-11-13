@@ -101,7 +101,7 @@ class TaskAlignedAssigner(nn.Module):
         """
         # 找出满足条件一：正样本的mask
         mask_in_gts = self.select_candidates_in_gts(anc_points, gt_bboxes)
-        # 计算每个正样本的分数，根据类别的分数
+        # 计算每个正样本的分数，根据正样本的类别分数和iou
         align_metric, overlaps = self.get_box_metrics(pd_scores, pd_bboxes, gt_labels, gt_bboxes, mask_in_gts * mask_gt)
         # 找出满足条件二：正样本的mask
         mask_topk = self.select_topk_candidates(align_metric)
