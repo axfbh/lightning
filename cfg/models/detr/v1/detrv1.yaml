@@ -1,0 +1,18 @@
+# YOLOv7 🚀 by Ultralytics, AGPL-3.0 license
+
+# Parameters
+nc: 20  # number of classes
+
+hidden_dim: 256
+
+dim_feedforward: 2048
+
+enc_layers: 6
+
+dec_layers: 6
+
+dropout: 0.1
+
+num_heads: 8
+
+num_queries: 100

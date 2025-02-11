@@ -10,7 +10,7 @@ from lightning import LightningModule
 from ops.models.backbone.utils import _shufflenet_extractor
 from ops.models.misc.atrous import ASPP
 from ops.utils.torch_utils import ModelEMA, smart_optimizer, smart_scheduler
-from ops.metric.SegmentationMetric import Evaluator
+from ops.metric.SegmentationMetric import SegmentationMetric
 from ops.utils.torch_utils import from_torch_to_numpy
 
 
@@ -62,7 +62,7 @@ class LiteSeg(LightningModule):
         loss = self.compute_loss(preds, masks)
 
         if not self.trainer.sanity_checking:
-            self.mask_metric.add_batch(from_torch_to_numpy(masks), from_torch_to_numpy(preds.argmax(1)))
+            self.mask_metric.update(from_torch_to_numpy(masks), from_torch_to_numpy(preds.argmax(1)))
 
         return loss
 
@@ -88,7 +88,7 @@ class LiteSeg(LightningModule):
         self.ema_model.update(self)
 
     def configure_model(self) -> None:
-        self.mask_metric = Evaluator(self.num_classes)
+        self.mask_metric = SegmentationMetric(self.num_classes)
 
     def configure_optimizers(self):
         optimizer = smart_optimizer(self,

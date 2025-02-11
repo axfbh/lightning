@@ -45,7 +45,7 @@ def _darknet_extractor(
                        "feature3",
                        "feature2",
                        "feature1",
-                       "stem", ][:trainable_layers]
+                       "stem"][:trainable_layers]
 
     for name, parameter in backbone.named_parameters():
         if all([not name.startswith(layer) for layer in layers_to_train]):
@@ -71,7 +71,7 @@ def _elandarknet_extractor(
                        "stage3",
                        "stage2",
                        "stage1",
-                       "stem", ][:trainable_layers]
+                       "stem"][:trainable_layers]
 
     for name, parameter in backbone.named_parameters():
         if all([not name.startswith(layer) for layer in layers_to_train]):
@@ -126,5 +126,27 @@ def _shufflenet_extractor(
                      "stage3": '3',
                      "stage4": '4',
                      'conv5': '5'}
+
+    return IntermediateLayerGetter(backbone, return_layers)
+
+
+def _resnet_extractor(
+        backbone,
+        trainable_layers: int):
+    # select layers that won't be frozen
+    if trainable_layers < 0 or trainable_layers > 5:
+        raise ValueError(f"Trainable layers should be in the range [0,5], got {trainable_layers}")
+
+    layers_to_train = ["conv1",
+                       'layer1',
+                       'layer2',
+                       'layer3',
+                       'layer4'][:trainable_layers]
+
+    for name, parameter in backbone.named_parameters():
+        if all([not name.startswith(layer) for layer in layers_to_train]):
+            parameter.requires_grad_(False)
+
+    return_layers = {"layer4": "0"}
 
     return IntermediateLayerGetter(backbone, return_layers)
