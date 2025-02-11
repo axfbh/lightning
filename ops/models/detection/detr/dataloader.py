@@ -27,7 +27,19 @@ PIN_MEMORY = str(os.getenv("PIN_MEMORY", True)).lower() == "true"  # global pin_
 def detr_collate_fn(batch):
     im_file, ori_shape, unpad_shape, resized_shape, image, target = zip(*batch)
 
-    target = torch.cat(target)
+    target_list = []
+
+    for file, oshape, ushape, rshape, t in zip(im_file, ori_shape, unpad_shape, resized_shape, target):
+        target_list.append({
+            'im_file': file,
+            'ori_shape': list(oshape),
+            'unpad_shape': list(ushape),
+            'resized_shape': list(rshape),
+            'cls': t[:, 0:1].long(),
+            'bboxes': t[:, 1:5],
+        })
+
+    # target = torch.cat(target)
 
     image = torch.stack(image)
 
@@ -37,13 +49,8 @@ def detr_collate_fn(batch):
         m[: s[0], :s[1]] = False
 
     return {
-        'im_file': list(im_file),
-        'ori_shape': list(ori_shape),
-        'unpad_shape': list(unpad_shape),
-        'resized_shape': list(resized_shape),
         'img': NestedTensor(image, mask),
-        'cls': target[:, 0:1].long(),
-        'bboxes': target[:, 1:5],
+        'target': target_list,
     }
 
 
