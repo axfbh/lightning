@@ -41,12 +41,15 @@ class CocoDetection(torchvision.datasets.CocoDetection):
 
         sample = A.Compose([
             A.LongestMaxSize(max_size=640),
-        ], A.BboxParams(format='pascal_voc', label_fields=['classes']))(image=img, bboxes=target['boxes'],
-                                                                        classes=target['labels'])
+        ], A.BboxParams(format='pascal_voc', label_fields=['classes']))(
+            image=img, bboxes=target['boxes'], classes=target['labels']
+        )
 
         h, w = sample['image'].shape[:-1]
 
-        target['boxes'] = box_convert(torch.tensor(sample['bboxes'], dtype=torch.float), 'xyxy', 'cxcywh') / torch.tensor([w, h, w, h])
+        target['boxes'] = box_convert(
+            torch.tensor(sample['bboxes'], dtype=torch.float), 'xyxy', 'cxcywh'
+        ) / torch.tensor([w, h, w, h])
         target['labels'] = torch.tensor(sample['classes'])
         target['orig_size'] = torch.tensor([h, w])
 

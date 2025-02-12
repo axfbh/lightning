@@ -140,7 +140,7 @@ class Detr:
             max_epochs=hyp.epochs,
             gradient_clip_val=10,
             gradient_clip_algorithm="norm",
-            num_sanity_val_steps=1,
+            num_sanity_val_steps=0,
             log_every_n_steps=1,
             callbacks=[warmup_callback, checkpoint_callback, plot_callback, progress_bar_callback]
         )

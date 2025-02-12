@@ -62,13 +62,18 @@ class DetrModel(LightningModule):
 
     def on_validation_epoch_end(self) -> None:
         if not self.trainer.sanity_checking:
+            self.metric.synchronize_between_processes()
             self.metric.accumulate()
             self.metric.summarize()
             stats = self.metric.coco_eval['bbox'].stats.tolist()
+
+            base_ds = get_coco_api_from_dataset(self.val_dataset)
+
+            self.metric = CocoEvaluator(base_ds, ['bbox'])
             # seen, nt, mp, mr, map50, map = self.metric.compute()
             #
-            # fitness = map * 0.9 + map50 * 0.1
-            #
+            fitness = 0
+
             # self.log_dict({'Images_unplot': seen,
             #                'Instances_unplot': nt,
             #                'P': mp,
