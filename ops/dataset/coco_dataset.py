@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import torchvision
 from torch.utils.data import DataLoader
+from torchvision.ops.boxes import box_convert
 
 from pycocotools import mask as coco_mask
 
@@ -45,7 +46,7 @@ class CocoDetection(torchvision.datasets.CocoDetection):
 
         h, w = sample['image'].shape[:-1]
 
-        target['boxes'] = torch.tensor(sample['bboxes'], dtype=torch.float) / torch.tensor([w, h, w, h])
+        target['boxes'] = box_convert(torch.tensor(sample['bboxes'], dtype=torch.float), 'xyxy', 'cxcywh') / torch.tensor([w, h, w, h])
         target['labels'] = torch.tensor(sample['classes'])
         target['orig_size'] = torch.tensor([h, w])
 
