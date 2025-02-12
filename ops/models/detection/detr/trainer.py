@@ -14,7 +14,7 @@ from ops.utils.logging import colorstr
 from ops.utils.torch_utils import auto_distribute
 from ops.models.detection.detr.detrv1 import DetrV1
 
-from ops.models.detection.detr.dataloader import create_dataloader
+from ops.dataset.coco_dataset import create_dataloader
 from functools import partial
 
 
@@ -87,30 +87,30 @@ class Detr:
         # ------------ data ------------
         data = OmegaConf.load(data)
 
-        train_dataloader = create_dataloader(data.train,
-                                             hyp.batch,
-                                             data.names,
-                                             hyp,
-                                             image_set='car_train',
-                                             augment=True,
-                                             workers=hyp.workers,
-                                             shuffle=True,
-                                             persistent_workers=True)
+        train_dataloader, train_dataset = create_dataloader(data.path,
+                                                            hyp.batch,
+                                                            hyp,
+                                                            image_set='train',
+                                                            augment=True,
+                                                            workers=hyp.workers,
+                                                            shuffle=True,
+                                                            persistent_workers=True)
 
-        val_dataloader = create_dataloader(data.val,
-                                           hyp.batch * 2,
-                                           data.names,
-                                           hyp,
-                                           image_set='car_val',
-                                           augment=False,
-                                           workers=hyp.workers,
-                                           shuffle=False,
-                                           persistent_workers=True)
+        val_dataloader, val_dataset = create_dataloader(data.path,
+                                                        hyp.batch * 2,
+                                                        hyp,
+                                                        image_set='val',
+                                                        augment=False,
+                                                        workers=hyp.workers,
+                                                        shuffle=False,
+                                                        persistent_workers=True)
+
+        model.val_dataset = val_dataset
 
         # ------------ trainer ------------
         accelerator = hyp.device if hyp.device in ["cpu", "tpu", "ipu", "hpu", "mps"] else 'gpu'
 
-        bar_train_title = ("box_loss", "obj_loss", "cls_loss")
+        bar_train_title = ("loss_ce", "loss_bbox", "loss_giou")
         bar_val_title = ("Images", "Instances", "P", "R", "mAP50", "mAP50-95")
 
         warmup_callback = WarmupLR(nbs=hyp.nbs,

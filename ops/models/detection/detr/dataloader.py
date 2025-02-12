@@ -29,17 +29,16 @@ def detr_collate_fn(batch):
 
     target_list = []
 
-    for file, oshape, ushape, rshape, t in zip(im_file, ori_shape, unpad_shape, resized_shape, target):
+    for i, (file, oshape, ushape, rshape, t) in enumerate(zip(im_file, ori_shape, unpad_shape, resized_shape, target)):
         target_list.append({
+            'image_id': i,
             'im_file': file,
             'ori_shape': list(oshape),
             'unpad_shape': list(ushape),
             'resized_shape': list(rshape),
-            'cls': t[:, 0:1].long(),
-            'bboxes': t[:, 1:5],
+            'labels': t[:, 0].long(),
+            'boxes': t[:, 1:5],
         })
-
-    # target = torch.cat(target)
 
     image = torch.stack(image)
 
