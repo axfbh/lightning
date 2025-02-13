@@ -387,6 +387,8 @@ class DetrV1(DetrModel):
 
         position_embedding = PositionEmbeddingSine(N_steps, normalize=True)
 
+        self.dec_layers = dec_layers
+
         self.num_classes = num_classes
 
         self.backbone = Joiner(backbone, position_embedding)
@@ -413,12 +415,26 @@ class DetrV1(DetrModel):
 
         outputs_class = self.class_embed(hs)
         outputs_coord = self.bbox_embed(hs).sigmoid()
-        out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
+        out = {'pred_logits': outputs_class[-1],
+               'pred_boxes': outputs_coord[-1],
+               'aux_outputs': self._set_aux_loss(outputs_class, outputs_coord)}
         return out
 
+    @torch.jit.unused
+    def _set_aux_loss(self, outputs_class, outputs_coord):
+        # this is a workaround to make torchscript happy, as torchscript
+        # doesn't support dictionary with non-homogeneous values, such
+        # as a dict having both a Tensor and a list.
+        return [{'pred_logits': a, 'pred_boxes': b}
+                for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
+
     def on_fit_start(self) -> None:
-        weight_dict = {'loss_ce': 1, 'loss_bbox': 5}
-        weight_dict['loss_giou'] = 2
+        weight_dict = {'loss_ce': 1, 'loss_bbox': 5, 'loss_giou': 2}
+        aux_weight_dict = {}
+        for i in range(self.dec_layers - 1):
+            aux_weight_dict.update({k + f'_{i}': v for k, v in weight_dict.items()})
+        weight_dict.update(aux_weight_dict)
+
         matcher = HungarianMatcher(cost_class=1, cost_bbox=5, cost_giou=2)
         losses = ['labels', 'boxes', 'cardinality']
         self.criterion = SetCriterion(self.num_classes, matcher=matcher, weight_dict=weight_dict, eos_coef=0.1,

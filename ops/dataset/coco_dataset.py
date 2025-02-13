@@ -7,6 +7,7 @@ import torch
 import torchvision
 from torch.utils.data import DataLoader
 from torchvision.ops.boxes import box_convert
+from torchvision.transforms import transforms
 
 from pycocotools import mask as coco_mask
 
@@ -50,10 +51,12 @@ class CocoDetection(torchvision.datasets.CocoDetection):
         target['boxes'] = box_convert(
             torch.tensor(sample['bboxes'], dtype=torch.float), 'xyxy', 'cxcywh'
         ) / torch.tensor([w, h, w, h])
+
         target['labels'] = torch.tensor(sample['classes'])
         target['orig_size'] = torch.tensor([h, w])
 
-        img = ToTensorV2()(image=sample['image'])['image'].float()
+        img = ToTensorV2()(image=sample['image'])['image'].float() / 255.
+        img = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(img)
         return img, target
 
 
@@ -177,8 +180,8 @@ def create_dataloader(path,
 
     return DataLoader(dataset=dataset,
                       batch_size=batch,
-                      shuffle=shuffle,
-                      num_workers=nw,
+                      shuffle=False,
+                      num_workers=1,
                       pin_memory=PIN_MEMORY,
                       collate_fn=collate_fn,
                       persistent_workers=persistent_workers), dataset

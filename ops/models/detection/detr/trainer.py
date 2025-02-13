@@ -110,7 +110,7 @@ class Detr:
         # ------------ trainer ------------
         accelerator = hyp.device if hyp.device in ["cpu", "tpu", "ipu", "hpu", "mps"] else 'gpu'
 
-        bar_train_title = ("loss_ce", "loss_bbox", "loss_giou")
+        bar_train_title = ("loss", "loss_ce", "loss_bbox", "loss_giou")
         bar_val_title = ("Images", "Instances", "P", "R", "mAP50", "mAP50-95")
 
         warmup_callback = WarmupLR(nbs=hyp.nbs,
