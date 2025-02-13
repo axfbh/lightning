@@ -1,8 +1,5 @@
 import os.path
-import sys
 from omegaconf import OmegaConf
-
-import torch
 
 import lightning as L
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -128,8 +125,6 @@ class Detr:
         progress_bar_callback = LitProgressBar(10)
 
         # plot_callback = PlotLogger(len(bar_val_title))
-
-        # progress_bar_callback = TQDMProgressBar(bar_train_title, bar_val_title)
 
         self._trainer = L.Trainer(
             accelerator=accelerator,

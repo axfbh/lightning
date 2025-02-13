@@ -437,5 +437,8 @@ class DetrV1(DetrModel):
 
         matcher = HungarianMatcher(cost_class=1, cost_bbox=5, cost_giou=2)
         losses = ['labels', 'boxes', 'cardinality']
-        self.criterion = SetCriterion(self.num_classes, matcher=matcher, weight_dict=weight_dict, eos_coef=0.1,
+        self.criterion = SetCriterion(self.num_classes,
+                                      matcher=matcher,
+                                      weight_dict=weight_dict,
+                                      eos_coef=0.1,
                                       losses=losses)

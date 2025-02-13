@@ -46,6 +46,11 @@ class DetrModel(LightningModule):
     def on_train_batch_end(self, outputs, batch: Any, batch_idx: int) -> None:
         self.ema_model.update(self)
 
+    def on_validation_start(self) -> None:
+        if not self.trainer.sanity_checking:
+            base_ds = get_coco_api_from_dataset(self.val_dataset)
+            self.metric = CocoEvaluator(base_ds, ['bbox'])
+
     def validation_step(self, batch, batch_idx):
         imgs, targets = batch
         train_out = self.ema_model(imgs)
@@ -75,21 +80,11 @@ class DetrModel(LightningModule):
             self.metric.accumulate()
             self.metric.summarize()
 
-            base_ds = get_coco_api_from_dataset(self.val_dataset)
-
-            self.metric = CocoEvaluator(base_ds, ['bbox'])
-
-            # self.metric.reset()
-
     def configure_model(self) -> None:
         batch_size = self.hyp.batch
         nbs = self.hyp.nbs  # nominal batch size
         accumulate = max(round(nbs / batch_size), 1)
         self.hyp['weight_decay'] *= batch_size * accumulate / nbs
-
-        base_ds = get_coco_api_from_dataset(self.val_dataset)
-
-        self.metric = CocoEvaluator(base_ds, ['bbox'])
 
         self.postprocesser = PostProcess()
 
