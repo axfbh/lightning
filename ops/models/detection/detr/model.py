@@ -26,18 +26,19 @@ class DetrModel(LightningModule):
 
     def training_step(self, batch, batch_idx):
         imgs, targets = batch
-        # imgs.tensors = imgs.tensors / 255.
         preds = self(imgs)
 
         loss_dict = self.criterion(preds, targets)  # box, obj, cls
         weight_dict = self.criterion.weight_dict
         loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+        loss_dict['loss'] = loss
 
-        self.log_dict({'loss': loss,
-                       'loss_ce': loss_dict['loss_ce'].item(),
-                       'loss_bbox': loss_dict['loss_bbox'].item(),
-                       'loss_giou': loss_dict['loss_giou'].item()},
-                      on_epoch=True, sync_dist=True, batch_size=self.trainer.train_dataloader.batch_size)
+        self.log_dict(loss_dict,
+                      on_step=True,
+                      on_epoch=True,
+                      sync_dist=True,
+                      prog_bar=True,
+                      batch_size=self.trainer.train_dataloader.batch_size)
 
         # lightning 的 loss / accumulate ，影响收敛
         return loss * self.trainer.accumulate_grad_batches * self.trainer.world_size
@@ -47,14 +48,21 @@ class DetrModel(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         imgs, targets = batch
-        # imgs.tensors = imgs.tensors / 255.
         train_out = self.ema_model(imgs)
 
         loss_dict = self.criterion(train_out, targets)  # box, obj, cls
         weight_dict = self.criterion.weight_dict
         loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+        loss_dict['loss'] = loss
 
         if not self.trainer.sanity_checking:
+            self.log_dict(loss_dict,
+                          on_step=True,
+                          on_epoch=True,
+                          sync_dist=True,
+                          prog_bar=True,
+                          batch_size=self.trainer.train_dataloader.batch_size)
+
             orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
             pred = self.postprocesser(train_out, orig_target_sizes)
             res = {target['image_id'].item(): output for target, output in zip(targets, pred)}
@@ -70,18 +78,6 @@ class DetrModel(LightningModule):
             base_ds = get_coco_api_from_dataset(self.val_dataset)
 
             self.metric = CocoEvaluator(base_ds, ['bbox'])
-            # seen, nt, mp, mr, map50, map = self.metric.compute()
-
-            fitness = 0
-
-            self.log_dict({'Images_unplot': 0,
-                           'Instances_unplot': 0,
-                           'P': 0,
-                           'R': 0,
-                           'mAP50': 0,
-                           'mAP50-95': 0,
-                           'fitness_un': fitness},
-                          on_epoch=True, sync_dist=True, batch_size=self.trainer.val_dataloaders.batch_size)
 
             # self.metric.reset()
 

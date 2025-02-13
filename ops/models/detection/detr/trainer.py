@@ -1,6 +1,8 @@
 import os.path
-
+import sys
 from omegaconf import OmegaConf
+
+import torch
 
 import lightning as L
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -8,8 +10,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.fabric.utilities.rank_zero import rank_zero_info
 
 from ops.utils import extract_ip
-from ops.utils.callbacks import WarmupLR
-from ops.utils.callbacks import PlotLogger, TQDMProgressBar
+from ops.utils.callbacks import WarmupLR, LitProgressBar
 from ops.utils.logging import colorstr
 from ops.utils.torch_utils import auto_distribute
 from ops.models.detection.detr.detrv1 import DetrV1
@@ -110,9 +111,6 @@ class Detr:
         # ------------ trainer ------------
         accelerator = hyp.device if hyp.device in ["cpu", "tpu", "ipu", "hpu", "mps"] else 'gpu'
 
-        bar_train_title = ("loss", "loss_ce", "loss_bbox", "loss_giou")
-        bar_val_title = ("Images", "Instances", "P", "R", "mAP50", "mAP50-95")
-
         warmup_callback = WarmupLR(nbs=hyp.nbs,
                                    momentum=hyp.momentum,
                                    warmup_bias_lr=hyp.warmup_bias_lr,
@@ -121,15 +119,17 @@ class Detr:
 
         checkpoint_callback = ModelCheckpoint(filename='best',
                                               save_last=True,
-                                              monitor='fitness_un',
+                                              monitor='loss',
                                               mode='max',
                                               auto_insert_metric_name=False,
                                               enable_version_counter=False)
         checkpoint_callback.FILE_EXTENSION = '.pt'
 
-        plot_callback = PlotLogger(len(bar_val_title))
+        progress_bar_callback = LitProgressBar(10)
 
-        progress_bar_callback = TQDMProgressBar(bar_train_title, bar_val_title)
+        # plot_callback = PlotLogger(len(bar_val_title))
+
+        # progress_bar_callback = TQDMProgressBar(bar_train_title, bar_val_title)
 
         self._trainer = L.Trainer(
             accelerator=accelerator,
@@ -141,8 +141,8 @@ class Detr:
             gradient_clip_val=10,
             gradient_clip_algorithm="norm",
             num_sanity_val_steps=0,
-            log_every_n_steps=1,
-            callbacks=[warmup_callback, checkpoint_callback, plot_callback, progress_bar_callback]
+            log_every_n_steps=10,
+            callbacks=[warmup_callback, checkpoint_callback, progress_bar_callback]
         )
 
         self.trainer.fit(model, train_dataloader, val_dataloader, ckpt_path=self.weight if hyp.resume else None)
