@@ -29,4 +29,4 @@ if __name__ == '__main__':
 
     set_seed(1)
     model = Detr("detrv1.yaml")
-    model.train(data="./cfg/datasets/coco.yaml", imgsz=[640, 640], epochs=100, batch=6)
+    model.train(data="./cfg/datasets/coco.yaml", imgsz=[640, 640], epochs=100, batch=16)

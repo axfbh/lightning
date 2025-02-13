@@ -180,8 +180,8 @@ def create_dataloader(path,
 
     return DataLoader(dataset=dataset,
                       batch_size=batch,
-                      shuffle=False,
-                      num_workers=1,
+                      shuffle=shuffle,
+                      num_workers=workers,
                       pin_memory=PIN_MEMORY,
                       collate_fn=collate_fn,
                       persistent_workers=persistent_workers), dataset
