@@ -8,7 +8,8 @@ from ops.metric.DetectionMetric import smooth_BCE
 
 from utils.tal import TaskAlignedAssigner, TaskNearestAssigner
 from utils.utils import make_grid
-from utils.boxes import bbox_iou, iou_loss, box_convert, dist2bbox, bbox2dist
+from utils.boxes import box_convert, dist2bbox, bbox2dist
+from ops.loss.iou_loss import iou_loss
 
 torch.set_printoptions(precision=4, sci_mode=False)
 
