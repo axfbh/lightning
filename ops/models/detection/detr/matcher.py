@@ -6,7 +6,7 @@ import torch
 from scipy.optimize import linear_sum_assignment
 from torch import nn
 
-from ops.loss.detr_loss import box_cxcywh_to_xyxy, generalized_box_iou
+from torchvision.ops.boxes import box_convert, generalized_box_iou
 
 
 class HungarianMatcher(nn.Module):
@@ -71,7 +71,8 @@ class HungarianMatcher(nn.Module):
         cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
 
         # Compute the giou cost betwen boxes
-        cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))
+        cost_giou = -generalized_box_iou(box_convert(out_bbox, 'cxcywh', 'xyxy'),
+                                         box_convert(tgt_bbox, 'cxcywh', 'xyxy'))
 
         # Final cost matrix
         C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
