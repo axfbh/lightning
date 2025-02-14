@@ -6,7 +6,6 @@ from lightning import LightningModule
 from ops.metric.DDectectionMetric import CocoEvaluator
 from ops.utils.torch_utils import ModelEMA, smart_optimizer
 from ops.utils.torch_utils import one_linear
-from utils.postprocess import PostProcess
 import torchvision
 
 
@@ -56,6 +55,7 @@ class DetrModel(LightningModule):
     def validation_step(self, batch, batch_idx):
         imgs, targets = batch
         orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
+
         pred, train_out = self.ema_model(imgs, orig_target_sizes)
 
         loss_dict = self.criterion(train_out, targets)  # box, obj, cls

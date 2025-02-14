@@ -14,7 +14,7 @@ class DetrHead(nn.Module):
         hidden_channels = [k for k in h + [output_dim]]
 
         self.bbox_embed = MLP(input_dim, hidden_channels)
-        self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
+        self.class_embed = nn.Linear(hidden_dim, num_classes)
 
     def forward(self, x, orig_target_sizes):
         outputs_coord, outputs_class = self.bbox_embed(x).sigmoid(), self.class_embed(x)
