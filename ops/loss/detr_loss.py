@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import torch.distributed as dist
 
 import torchvision
-from torchvision.ops.boxes import box_area, box_convert, generalized_box_iou
+from ops.loss.iou_loss import iou_loss
 
 if version.parse(torchvision.__version__) < version.parse('0.7'):
     from torchvision.ops import _new_empty_tensor
@@ -53,20 +53,20 @@ def accuracy(output, target, topk=(1,)):
 
 
 # modified from torchvision to also return the union
-def box_iou(boxes1, boxes2):
-    area1 = box_area(boxes1)
-    area2 = box_area(boxes2)
-
-    lt = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
-    rb = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
-
-    wh = (rb - lt).clamp(min=0)  # [N,M,2]
-    inter = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
-
-    union = area1[:, None] + area2 - inter
-
-    iou = inter / union
-    return iou, union
+# def box_iou(boxes1, boxes2):
+#     area1 = box_area(boxes1)
+#     area2 = box_area(boxes2)
+#
+#     lt = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
+#     rb = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
+#
+#     wh = (rb - lt).clamp(min=0)  # [N,M,2]
+#     inter = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
+#
+#     union = area1[:, None] + area2 - inter
+#
+#     iou = inter / union
+#     return iou, union
 
 
 def is_dist_avail_and_initialized():
@@ -160,9 +160,7 @@ class SetCriterion(nn.Module):
         losses = {}
         losses['loss_bbox'] = loss_bbox.sum() / num_boxes
 
-        loss_giou = 1 - torch.diag(generalized_box_iou(
-            box_convert(src_boxes, 'cxcywh', 'xyxy'),
-            box_convert(target_boxes, 'cxcywh', 'xyxy')))
+        loss_giou = 1 - iou_loss(src_boxes, target_boxes, 'cxcywh', 'xyxy', GIoU=True)
         losses['loss_giou'] = loss_giou.sum() / num_boxes
         return losses
 

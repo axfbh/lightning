@@ -2,8 +2,10 @@
 """
 Modules to compute the matching cost and solve the corresponding LSAP.
 """
-import torch
+
 from scipy.optimize import linear_sum_assignment
+
+import torch
 from torch import nn
 
 from torchvision.ops.boxes import box_convert, generalized_box_iou
