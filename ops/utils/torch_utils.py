@@ -122,13 +122,18 @@ def torch_distributed_zero_first(local_rank: int, num_nodes: int):
         dist.barrier()
 
 
-def init_seeds(seed=0):
-    # Initialize random number generator (RNG) seeds https://pytorch.org/docs/stable/notes/randomness.html
-    random.seed(seed)
-    np.random.seed(seed)
+def init_seeds(seed):
     torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)  # for Multi-GPU, exception safe
+    # 设置 CUDA 的随机种子（如果使用 GPU）
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)  # 如果使用多 GPU
+        torch.backends.cudnn.deterministic = True  # 确保 CUDA 卷积操作是确定性的
+        torch.backends.cudnn.benchmark = False  # 关闭 CUDA 的自动优化
+    # 设置 Python 的随机种子
+    random.seed(seed)
+    # 设置 NumPy 的随机种子
+    np.random.seed(seed)
 
 
 def is_parallel(model):

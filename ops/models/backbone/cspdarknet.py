@@ -271,3 +271,31 @@ class CSPDarknetV8(nn.Module):
         x = self.fc(x)
 
         return x
+
+
+def cpsdarknetv4n(pretrained, norm_layer):
+    base_channels = int(0.25 * 32)  # 64
+    base_depth = max(round(0.33 * 3), 1)  # 3
+
+    return CSPDarknetV4(base_channels, base_depth)
+
+
+def cpsdarknetv4s(pretrained, norm_layer):
+    base_channels = int(0.25 * 32)  # 64
+    base_depth = max(round(0.33 * 3), 1)  # 3
+
+    return CSPDarknetV4(base_channels, base_depth)
+
+
+def cpsdarknetv4m(pretrained, norm_layer):
+    base_channels = int(0.25 * 32)  # 64
+    base_depth = max(round(0.33 * 3), 1)  # 3
+
+    return CSPDarknetV4(base_channels, base_depth)
+
+
+def cpsdarknetv4x(pretrained, norm_layer):
+    base_channels = int(0.25 * 32)  # 64
+    base_depth = max(round(0.33 * 3), 1)  # 3
+
+    return CSPDarknetV4(base_channels, base_depth)

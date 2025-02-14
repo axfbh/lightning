@@ -52,37 +52,6 @@ def accuracy(output, target, topk=(1,)):
     return res
 
 
-# modified from torchvision to also return the union
-# def box_iou(boxes1, boxes2):
-#     area1 = box_area(boxes1)
-#     area2 = box_area(boxes2)
-#
-#     lt = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
-#     rb = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
-#
-#     wh = (rb - lt).clamp(min=0)  # [N,M,2]
-#     inter = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
-#
-#     union = area1[:, None] + area2 - inter
-#
-#     iou = inter / union
-#     return iou, union
-
-
-def is_dist_avail_and_initialized():
-    if not dist.is_available():
-        return False
-    if not dist.is_initialized():
-        return False
-    return True
-
-
-def get_world_size():
-    if not is_dist_avail_and_initialized():
-        return 1
-    return dist.get_world_size()
-
-
 class SetCriterion(nn.Module):
     """ This class computes the loss for DETR.
     The process happens in two steps:
@@ -192,6 +161,7 @@ class SetCriterion(nn.Module):
              targets: list of dicts, such that len(targets) == batch_size.
                       The expected keys in each dict depends on the losses applied, see each loss' doc
         """
+        # 取出 非 aux_outputs
         outputs_without_aux = {k: v for k, v in outputs.items() if k != 'aux_outputs'}
 
         # Retrieve the matching between the outputs of the last layer and the targets
@@ -200,9 +170,7 @@ class SetCriterion(nn.Module):
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
-        if is_dist_avail_and_initialized():
-            torch.distributed.all_reduce(num_boxes)
-        num_boxes = torch.clamp(num_boxes / get_world_size(), min=1).item()
+        num_boxes = torch.clamp(num_boxes / 1, min=1).item()
 
         # Compute all the requested losses
         losses = {}

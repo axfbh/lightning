@@ -1,19 +1,18 @@
 import copy
-from typing import Optional, Dict, List
+from typing import Optional, List
 
 import torch
 from torch import Tensor, nn
 import torch.nn.functional as F
-import torch.distributed as dist
-
-import torchvision
-from torchvision.models._utils import IntermediateLayerGetter
+from torchvision.ops.boxes import box_convert
 
 from ops.utils.torch_utils import NestedTensor
 from ops.loss.detr_loss import SetCriterion
 from ops.models.detection.detr.model import DetrModel
 from ops.models.detection.detr.matcher import HungarianMatcher
 from ops.models.misc.position_encoding import PositionEmbeddingSine
+from torchvision.ops.misc import FrozenBatchNorm2d
+from ops.models.backbone.utils import Backbone
 
 
 class MLP(nn.Module):
@@ -29,77 +28,6 @@ class MLP(nn.Module):
         for i, layer in enumerate(self.layers):
             x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
         return x
-
-
-class FrozenBatchNorm2d(torch.nn.Module):
-    """
-    BatchNorm2d where the batch statistics and the affine parameters are fixed.
-
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt,
-    without which any other models than torchvision.models.resnet[18,34,50,101]
-    produce nans.
-    """
-
-    def __init__(self, n):
-        super(FrozenBatchNorm2d, self).__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
-
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
-                              missing_keys, unexpected_keys, error_msgs):
-        num_batches_tracked_key = prefix + 'num_batches_tracked'
-        if num_batches_tracked_key in state_dict:
-            del state_dict[num_batches_tracked_key]
-
-        super(FrozenBatchNorm2d, self)._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict,
-            missing_keys, unexpected_keys, error_msgs)
-
-    def forward(self, x):
-        # move reshapes to the beginning
-        # to make it fuser-friendly
-        w = self.weight.reshape(1, -1, 1, 1)
-        b = self.bias.reshape(1, -1, 1, 1)
-        rv = self.running_var.reshape(1, -1, 1, 1)
-        rm = self.running_mean.reshape(1, -1, 1, 1)
-        eps = 1e-5
-        scale = w * (rv + eps).rsqrt()
-        bias = b - rm * scale
-        return x * scale + bias
-
-
-class BackboneBase(nn.Module):
-
-    def __init__(self, backbone: nn.Module, train_backbone: bool, num_channels: int):
-        super().__init__()
-        for name, parameter in backbone.named_parameters():
-            if not train_backbone or 'layer2' not in name and 'layer3' not in name and 'layer4' not in name:
-                parameter.requires_grad_(False)
-        return_layers = {'layer4': "0"}
-        self.body = IntermediateLayerGetter(backbone, return_layers=return_layers)
-        self.num_channels = num_channels
-
-    def forward(self, tensor_list: NestedTensor):
-        xs = self.body(tensor_list.tensors)
-        out: Dict[str, NestedTensor] = {}
-        for name, x in xs.items():
-            m = tensor_list.mask
-            assert m is not None
-            mask = F.interpolate(m[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
-            out[name] = NestedTensor(x, mask)
-        return out
-
-
-class Backbone(BackboneBase):
-    """ResNet backbone with frozen BatchNorm."""
-
-    def __init__(self, name: str,
-                 train_backbone: bool):
-        backbone = getattr(torchvision.models, name)(norm_layer=FrozenBatchNorm2d)
-        num_channels = 512 if name in ('resnet18', 'resnet34') else 2048
-        super().__init__(backbone, train_backbone, num_channels)
 
 
 class Transformer(nn.Module):
@@ -346,13 +274,17 @@ class DetrV1(DetrModel):
                  dim_feedforward,
                  enc_layers,
                  dec_layers,
+                 num_channels,
                  num_queries,
                  num_classes,
                  *args,
                  **kwargs):
         super(DetrV1, self).__init__(*args, **kwargs)
 
-        backbone = Backbone('resnet50', True)
+        backbone = Backbone(name='resnet50',
+                            layers_to_train=['layer2', 'layer3', 'layer4'],
+                            return_interm_layers={'layer4': "0"},
+                            norm_layer=FrozenBatchNorm2d)
 
         N_steps = hidden_dim // 2
 
@@ -375,9 +307,9 @@ class DetrV1(DetrModel):
         self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
         self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
         self.query_embed = nn.Embedding(num_queries, hidden_dim)
-        self.input_proj = nn.Conv2d(backbone.num_channels, hidden_dim, kernel_size=1)
+        self.input_proj = nn.Conv2d(num_channels, hidden_dim, kernel_size=1)
 
-    def forward(self, samples: NestedTensor):
+    def forward(self, samples: NestedTensor, orig_target_sizes):
         features, pos = self.backbone(samples)
 
         src, mask = features[-1].decompose()
@@ -386,10 +318,30 @@ class DetrV1(DetrModel):
 
         outputs_class = self.class_embed(hs)
         outputs_coord = self.bbox_embed(hs).sigmoid()
-        out = {'pred_logits': outputs_class[-1],
-               'pred_boxes': outputs_coord[-1],
-               'aux_outputs': self._set_aux_loss(outputs_class, outputs_coord)}
-        return out
+        outputs = {'pred_logits': outputs_class[-1],
+                   'pred_boxes': outputs_coord[-1],
+                   'aux_outputs': self._set_aux_loss(outputs_class, outputs_coord)}
+
+        if self.training:
+            return outputs
+        z = self._inference(outputs, orig_target_sizes)
+        return z, outputs
+
+    def _inference(self, outputs, target_sizes):
+        out_logits, out_bbox = outputs['pred_logits'], outputs['pred_boxes']
+
+        prob = F.softmax(out_logits, -1)
+        scores, labels = prob[..., :-1].max(-1)
+
+        boxes = box_convert(out_bbox, 'cxcywh', 'xyxy')
+
+        img_h, img_w = target_sizes.unbind(1)
+        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
+        boxes = boxes * scale_fct[:, None, :]
+
+        results = [{'scores': s, 'labels': l, 'boxes': b} for s, l, b in zip(scores, labels, boxes)]
+
+        return results
 
     @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
@@ -400,16 +352,10 @@ class DetrV1(DetrModel):
                 for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
     def on_fit_start(self) -> None:
-        weight_dict = {'loss_ce': 1, 'loss_bbox': 5, 'loss_giou': 2}
-        aux_weight_dict = {}
-        for i in range(self.dec_layers - 1):
-            aux_weight_dict.update({k + f'_{i}': v for k, v in weight_dict.items()})
-        weight_dict.update(aux_weight_dict)
-
         matcher = HungarianMatcher(cost_class=1, cost_bbox=5, cost_giou=2)
         losses = ['labels', 'boxes', 'cardinality']
         self.criterion = SetCriterion(self.num_classes,
                                       matcher=matcher,
-                                      weight_dict=weight_dict,
+                                      weight_dict=self.hyp['weight_dict'],
                                       eos_coef=0.1,
                                       losses=losses)

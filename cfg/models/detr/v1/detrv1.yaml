@@ -16,3 +16,5 @@ dropout: 0.1
 num_heads: 8
 
 num_queries: 20
+
+num_channels: 2048

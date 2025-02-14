@@ -39,6 +39,7 @@ class Detr:
         enc_layers = model.enc_layers
         dec_layers = model.dec_layers
         num_queries = model.num_queries
+        num_channels = model.num_channels
         num_classes = model.nc
 
         self.weight = weight
@@ -50,6 +51,7 @@ class Detr:
                           dim_feedforward=dim_feedforward,
                           enc_layers=enc_layers,
                           dec_layers=dec_layers,
+                          num_channels=num_channels,
                           num_queries=num_queries,
                           num_classes=num_classes)
         }[version]

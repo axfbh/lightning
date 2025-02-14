@@ -147,7 +147,7 @@ def convert_albumen_to_coco_fmt(target, sample):
     ) / torch.tensor([w, h, w, h])
 
     target['labels'] = torch.tensor(sample['classes'])
-    target['orig_size'] = torch.tensor([h, w])
+    target['size'] = torch.tensor([h, w])
 
     return target
 

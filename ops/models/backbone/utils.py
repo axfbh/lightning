@@ -1,11 +1,17 @@
+from typing import Optional, List, Union, Dict
+
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+import torchvision
+from torchvision.models._utils import IntermediateLayerGetter
+
+import ops
 from ops.models.backbone import cspdarknet
 from ops.models.backbone import darknet
 from ops.models.backbone import elandarknet
-from typing import Optional, List, Union
-import torch.nn as nn
-from torchvision.models._utils import IntermediateLayerGetter
-from torchvision.models.mobilenetv3 import MobileNetV3
+from ops.utils.torch_utils import NestedTensor
 
 
 def _cspdarknet_extractor(
@@ -130,23 +136,34 @@ def _shufflenet_extractor(
     return IntermediateLayerGetter(backbone, return_layers)
 
 
-def _resnet_extractor(
-        backbone,
-        trainable_layers: int):
-    # select layers that won't be frozen
-    if trainable_layers < 0 or trainable_layers > 5:
-        raise ValueError(f"Trainable layers should be in the range [0,5], got {trainable_layers}")
+class BackboneBase(nn.Module):
 
-    layers_to_train = ["conv1",
-                       'layer1',
-                       'layer2',
-                       'layer3',
-                       'layer4'][:trainable_layers]
+    def __init__(self, backbone: nn.Module, layers_to_train: List, return_interm_layers: Dict):
+        super().__init__()
+        for name, parameter in backbone.named_parameters():
+            if all([not name.startswith(layer) for layer in layers_to_train]):
+                parameter.requires_grad_(False)
+        self.body = IntermediateLayerGetter(backbone, return_layers=return_interm_layers)
 
-    for name, parameter in backbone.named_parameters():
-        if all([not name.startswith(layer) for layer in layers_to_train]):
-            parameter.requires_grad_(False)
+    def forward(self, tensor_list: NestedTensor):
+        xs = self.body(tensor_list.tensors)
+        out: Dict[str, NestedTensor] = {}
+        for name, x in xs.items():
+            m = tensor_list.mask
+            assert m is not None
+            mask = F.interpolate(m[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
+            out[name] = NestedTensor(x, mask)
+        return out
 
-    return_layers = {"layer4": "0"}
 
-    return IntermediateLayerGetter(backbone, return_layers)
+class Backbone(BackboneBase):
+    """ResNet backbone with frozen BatchNorm."""
+
+    def __init__(self,
+                 name: str,
+                 layers_to_train: List,
+                 return_interm_layers: Dict,
+                 norm_layer=nn.BatchNorm2d,
+                 pretrained=True):
+        backbone = getattr(ops.models.backbone, name)(pretrained=pretrained, norm_layer=norm_layer)
+        super().__init__(backbone, layers_to_train, return_interm_layers)

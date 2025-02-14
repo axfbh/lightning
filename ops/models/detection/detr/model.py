@@ -21,12 +21,14 @@ class DetrModel(LightningModule):
         super(DetrModel, self).__init__()
         self.hyp = hyp
 
-    def forward(self, x):
-        return self(x)
+    def forward(self, x, orig_target_sizes):
+        return self(x, orig_target_sizes)
 
     def training_step(self, batch, batch_idx):
         imgs, targets = batch
-        preds = self(imgs)
+        orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
+
+        preds = self(imgs, orig_target_sizes)
 
         loss_dict = self.criterion(preds, targets)  # box, obj, cls
         weight_dict = self.criterion.weight_dict
@@ -53,7 +55,8 @@ class DetrModel(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         imgs, targets = batch
-        train_out = self.ema_model(imgs)
+        orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
+        pred, train_out = self.ema_model(imgs, orig_target_sizes)
 
         loss_dict = self.criterion(train_out, targets)  # box, obj, cls
         weight_dict = self.criterion.weight_dict
@@ -68,8 +71,6 @@ class DetrModel(LightningModule):
                           prog_bar=True,
                           batch_size=self.trainer.train_dataloader.batch_size)
 
-            orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
-            pred = self.postprocesser(train_out, orig_target_sizes)
             res = {target['image_id'].item(): output for target, output in zip(targets, pred)}
             self.metric.update(res)
         return loss
@@ -81,6 +82,11 @@ class DetrModel(LightningModule):
             self.metric.summarize()
 
     def configure_model(self) -> None:
+        aux_weight_dict = {}
+        for i in range(self.dec_layers - 1):
+            aux_weight_dict.update({k + f'_{i}': v for k, v in self.hyp['weight_dict'].items()})
+        self.hyp['weight_dict'].update(aux_weight_dict)
+
         batch_size = self.hyp.batch
         nbs = self.hyp.nbs  # nominal batch size
         accumulate = max(round(nbs / batch_size), 1)
