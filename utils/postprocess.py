@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch.functional import F
-from ops.loss.detr_loss import box_cxcywh_to_xyxy
+from torchvision.ops.boxes import box_convert
 
 
 class PostProcess(nn.Module):
@@ -21,7 +21,7 @@ class PostProcess(nn.Module):
         prob = F.softmax(out_logits, -1)
         scores, labels = prob[..., :-1].max(-1)
 
-        boxes = box_cxcywh_to_xyxy(out_bbox)
+        boxes = box_convert(out_bbox, 'cxcywh', 'xyxy')
 
         img_h, img_w = target_sizes.unbind(1)
         scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
