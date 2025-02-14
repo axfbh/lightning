@@ -49,7 +49,7 @@ class CocoDetection(torchvision.datasets.CocoDetection):
             sample = self._transforms(sample)
 
         # albumentations格式 转换成 coco格式
-        target = convert_albumen_to_coco_fmt(sample)
+        target = convert_albumen_to_coco_fmt(target, sample)
 
         img = ToTensorV2()(image=sample['image'])['image'].float() / 255.
         img = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(img)
@@ -138,18 +138,18 @@ def convert_coco_poly_to_mask(segmentations, height, width):
     return masks
 
 
-def convert_albumen_to_coco_fmt(sample):
+def convert_albumen_to_coco_fmt(target, sample):
     h, w = sample['image'].shape[:-1]
 
     # x1,y1,x2,y2
-    sample['boxes'] = box_convert(
+    target['boxes'] = box_convert(
         torch.tensor(sample['bboxes'], dtype=torch.float), 'xyxy', 'cxcywh'
     ) / torch.tensor([w, h, w, h])
 
-    sample['labels'] = torch.tensor(sample['classes'])
-    sample['orig_size'] = torch.tensor([h, w])
+    target['labels'] = torch.tensor(sample['classes'])
+    target['orig_size'] = torch.tensor([h, w])
 
-    return sample
+    return target
 
 
 def create_dataloader(path,

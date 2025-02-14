@@ -9,29 +9,11 @@ import torch.distributed as dist
 import torchvision
 from torchvision.models._utils import IntermediateLayerGetter
 
-from ops.models.detection.detr.model import DetrModel
-from ops.models.misc.position_encoding import PositionEmbeddingSine
-from ops.models.detection.detr.matcher import HungarianMatcher
 from ops.utils.torch_utils import NestedTensor
 from ops.loss.detr_loss import SetCriterion
-
-
-def is_dist_avail_and_initialized():
-    if not dist.is_available():
-        return False
-    if not dist.is_initialized():
-        return False
-    return True
-
-
-def get_rank():
-    if not is_dist_avail_and_initialized():
-        return 0
-    return dist.get_rank()
-
-
-def is_main_process():
-    return get_rank() == 0
+from ops.models.detection.detr.model import DetrModel
+from ops.models.detection.detr.matcher import HungarianMatcher
+from ops.models.misc.position_encoding import PositionEmbeddingSine
 
 
 class MLP(nn.Module):
@@ -90,15 +72,12 @@ class FrozenBatchNorm2d(torch.nn.Module):
 
 class BackboneBase(nn.Module):
 
-    def __init__(self, backbone: nn.Module, train_backbone: bool, num_channels: int, return_interm_layers: bool):
+    def __init__(self, backbone: nn.Module, train_backbone: bool, num_channels: int):
         super().__init__()
         for name, parameter in backbone.named_parameters():
             if not train_backbone or 'layer2' not in name and 'layer3' not in name and 'layer4' not in name:
                 parameter.requires_grad_(False)
-        if return_interm_layers:
-            return_layers = {"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"}
-        else:
-            return_layers = {'layer4': "0"}
+        return_layers = {'layer4': "0"}
         self.body = IntermediateLayerGetter(backbone, return_layers=return_layers)
         self.num_channels = num_channels
 
@@ -117,14 +96,10 @@ class Backbone(BackboneBase):
     """ResNet backbone with frozen BatchNorm."""
 
     def __init__(self, name: str,
-                 train_backbone: bool,
-                 return_interm_layers: bool,
-                 dilation: bool):
-        backbone = getattr(torchvision.models, name)(
-            replace_stride_with_dilation=[False, False, dilation],
-            pretrained=is_main_process(), norm_layer=FrozenBatchNorm2d)
+                 train_backbone: bool):
+        backbone = getattr(torchvision.models, name)(norm_layer=FrozenBatchNorm2d)
         num_channels = 512 if name in ('resnet18', 'resnet34') else 2048
-        super().__init__(backbone, train_backbone, num_channels, return_interm_layers)
+        super().__init__(backbone, train_backbone, num_channels)
 
 
 class Transformer(nn.Module):
@@ -170,7 +145,7 @@ class TransformerEncoder(nn.Module):
 
     def __init__(self, encoder_layer, num_layers):
         super().__init__()
-        self.layers = _get_clones(encoder_layer, num_layers)
+        self.layers = nn.ModuleList([copy.deepcopy(encoder_layer) for _ in range(num_layers)])
         self.num_layers = num_layers
 
     def forward(self, src,
@@ -201,7 +176,7 @@ class TransformerDecoder(nn.Module):
 
     def __init__(self, decoder_layer, num_layers, norm=None, return_intermediate=False):
         super().__init__()
-        self.layers = _get_clones(decoder_layer, num_layers)
+        self.layers = nn.ModuleList([copy.deepcopy(decoder_layer) for _ in range(num_layers)])
         self.num_layers = num_layers
         self.norm = norm
         self.return_intermediate = return_intermediate
@@ -337,10 +312,6 @@ class TransformerDecoderLayer(nn.Module):
                                  tgt_key_padding_mask, memory_key_padding_mask, pos, query_pos)
 
 
-def _get_clones(module, N):
-    return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
-
-
 def _get_activation_fn(activation):
     """Return an activation function given a string"""
     if activation == "relu":
@@ -381,7 +352,7 @@ class DetrV1(DetrModel):
                  **kwargs):
         super(DetrV1, self).__init__(*args, **kwargs)
 
-        backbone = Backbone('resnet50', True, False, False)
+        backbone = Backbone('resnet50', True)
 
         N_steps = hidden_dim // 2
 
