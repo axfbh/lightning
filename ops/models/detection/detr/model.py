@@ -6,7 +6,7 @@ from lightning import LightningModule
 from ops.metric.DDectectionMetric import CocoEvaluator
 from ops.utils.torch_utils import ModelEMA, smart_optimizer
 from ops.utils.torch_utils import one_linear
-from ops.models.detection.detr.postprocess import PostProcess
+from utils.postprocess import PostProcess
 import torchvision
 
 

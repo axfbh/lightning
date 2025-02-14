@@ -121,7 +121,7 @@ def kmeans(X, centroids, eps, anchor_file, width_in_cfg_file, height_in_cfg_file
 def main():
     args = OmegaConf.load('../config/config.yaml')
 
-    output_dir = '../'
+    output_dir = '../ops/'
 
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)

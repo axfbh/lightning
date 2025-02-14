@@ -3,8 +3,7 @@
 import torch
 import torch.nn as nn
 from utils.utils import make_grid
-from utils.boxes import iou_loss
-from torchvision.ops.ciou_loss import complete_box_iou_loss
+from ops.loss.iou_loss import iou_loss
 
 
 class TaskAlignedAssigner(nn.Module):

@@ -30,3 +30,4 @@ class PostProcess(nn.Module):
         results = [{'scores': s, 'labels': l, 'boxes': b} for s, l, b in zip(scores, labels, boxes)]
 
         return results
+

@@ -1,8 +1,10 @@
+import math
 from typing import Callable, List
 
 import numpy as np
+
 import torch
-import math
+
 import ops.cv.io as io
 
 
@@ -73,3 +75,5 @@ class DataCache:
 
     def __len__(self):
         return len(self.image_paths)
+
+

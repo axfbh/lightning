@@ -1,8 +1,7 @@
 import math
 import torch
 from torch import nn
-from ops.models.detection.detr.utils import NestedTensor
-
+from ops.utils.torch_utils import NestedTensor
 
 
 class PositionEmbeddingSine(nn.Module):

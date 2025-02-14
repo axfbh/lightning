@@ -10,9 +10,9 @@ import torchvision
 from torchvision.models._utils import IntermediateLayerGetter
 
 from ops.models.detection.detr.model import DetrModel
-from ops.models.detection.detr.position_encoding import PositionEmbeddingSine
-from ops.models.detection.detr.utils import NestedTensor
+from ops.models.misc.position_encoding import PositionEmbeddingSine
 from ops.models.detection.detr.matcher import HungarianMatcher
+from ops.utils.torch_utils import NestedTensor
 from ops.loss.detr_loss import SetCriterion
 
 

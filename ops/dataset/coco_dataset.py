@@ -1,6 +1,6 @@
 import os.path
 from pathlib import Path
-
+from typing import List
 import numpy as np
 
 import torch
@@ -14,7 +14,7 @@ from pycocotools import mask as coco_mask
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
-from ops.utils.misc import nested_tensor_from_tensor_list
+from ops.utils.torch_utils import nested_tensor_from_tensor_list
 
 PIN_MEMORY = str(os.getenv("PIN_MEMORY", True)).lower() == "true"  # global pin_memory for dataloaders
 
@@ -26,8 +26,9 @@ def collate_fn(batch):
 
 
 class CocoDetection(torchvision.datasets.CocoDetection):
-    def __init__(self, img_folder, ann_file, transforms, return_masks):
+    def __init__(self, img_folder, ann_file, imgsz: List, transforms, return_masks):
         super(CocoDetection, self).__init__(img_folder, ann_file)
+        self.imgsz = imgsz
         self._transforms = transforms
         self.prepare = ConvertCocoPolysToMask(return_masks)
 
@@ -37,23 +38,18 @@ class CocoDetection(torchvision.datasets.CocoDetection):
         target = {'image_id': image_id, 'annotations': target}
         img, target = self.prepare(img, target)
         img = np.array(img)
-        if self._transforms is not None:
-            img, target = self._transforms(img, target)
 
         sample = A.Compose([
-            A.LongestMaxSize(max_size=640),
+            A.LongestMaxSize(max_size=self.imgsz[0]),
         ], A.BboxParams(format='pascal_voc', label_fields=['classes']))(
             image=img, bboxes=target['boxes'], classes=target['labels']
         )
 
-        h, w = sample['image'].shape[:-1]
+        if self._transforms is not None:
+            sample = self._transforms(sample)
 
-        target['boxes'] = box_convert(
-            torch.tensor(sample['bboxes'], dtype=torch.float), 'xyxy', 'cxcywh'
-        ) / torch.tensor([w, h, w, h])
-
-        target['labels'] = torch.tensor(sample['classes'])
-        target['orig_size'] = torch.tensor([h, w])
+        # albumentations格式 转换成 coco格式
+        target = convert_albumen_to_coco_fmt(sample)
 
         img = ToTensorV2()(image=sample['image'])['image'].float() / 255.
         img = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(img)
@@ -142,18 +138,18 @@ def convert_coco_poly_to_mask(segmentations, height, width):
     return masks
 
 
-def coco_build(image_set, coco_path):
-    root = Path(coco_path)
-    assert root.exists(), f'provided COCO path {root} does not exist'
-    mode = 'instances'
-    PATHS = {
-        "train": (root / "train2017", root / "annotations" / f'{mode}_train2017.json'),
-        "val": (root / "val2017", root / "annotations" / f'{mode}_val2017.json'),
-    }
+def convert_albumen_to_coco_fmt(sample):
+    h, w = sample['image'].shape[:-1]
 
-    img_folder, ann_file = PATHS[image_set]
-    dataset = CocoDetection(img_folder, ann_file, transforms=None, return_masks=False)
-    return dataset
+    # x1,y1,x2,y2
+    sample['boxes'] = box_convert(
+        torch.tensor(sample['bboxes'], dtype=torch.float), 'xyxy', 'cxcywh'
+    ) / torch.tensor([w, h, w, h])
+
+    sample['labels'] = torch.tensor(sample['classes'])
+    sample['orig_size'] = torch.tensor([h, w])
+
+    return sample
 
 
 def create_dataloader(path,
@@ -163,6 +159,7 @@ def create_dataloader(path,
                       augment=False,
                       workers=3,
                       shuffle=False,
+                      return_masks=False,
                       persistent_workers=False):
     path = Path(path)
 
@@ -172,7 +169,10 @@ def create_dataloader(path,
     }
 
     img_folder, ann_file = PATHS[image_set]
-    dataset = CocoDetection(img_folder, ann_file, transforms=None, return_masks=False)
+    dataset = CocoDetection(img_folder, ann_file,
+                            imgsz=hyp.imgsz,
+                            transforms=None if augment else None,
+                            return_masks=return_masks)
 
     batch = min(batch, len(dataset))
     nd = torch.cuda.device_count()  # number of CUDA devices
@@ -181,7 +181,7 @@ def create_dataloader(path,
     return DataLoader(dataset=dataset,
                       batch_size=batch,
                       shuffle=shuffle,
-                      num_workers=workers,
+                      num_workers=nw,
                       pin_memory=PIN_MEMORY,
                       collate_fn=collate_fn,
                       persistent_workers=persistent_workers), dataset
