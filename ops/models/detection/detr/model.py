@@ -92,8 +92,6 @@ class DetrModel(LightningModule):
         accumulate = max(round(nbs / batch_size), 1)
         self.hyp['weight_decay'] *= batch_size * accumulate / nbs
 
-        self.postprocesser = PostProcess()
-
     def configure_optimizers(self):
         optimizer = smart_optimizer(self,
                                     self.hyp['optimizer'],

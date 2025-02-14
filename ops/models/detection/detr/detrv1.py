@@ -4,7 +4,6 @@ from typing import Optional, List
 import torch
 from torch import Tensor, nn
 import torch.nn.functional as F
-from torchvision.ops.boxes import box_convert
 
 from ops.utils.torch_utils import NestedTensor
 from ops.loss.detr_loss import SetCriterion
@@ -13,21 +12,22 @@ from ops.models.detection.detr.matcher import HungarianMatcher
 from ops.models.misc.position_encoding import PositionEmbeddingSine
 from torchvision.ops.misc import FrozenBatchNorm2d
 from ops.models.backbone.utils import Backbone
+from ops.models.head.detr_head import DetrHead
 
 
-class MLP(nn.Module):
-    """ Very simple multi-layer perceptron (also called FFN)"""
-
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
-        super().__init__()
-        self.num_layers = num_layers
-        h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
-
-    def forward(self, x):
-        for i, layer in enumerate(self.layers):
-            x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
-        return x
+# class MLP(nn.Module):
+#     """ Very simple multi-layer perceptron (also called FFN)"""
+#
+#     def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
+#         super().__init__()
+#         self.num_layers = num_layers
+#         h = [hidden_dim] * (num_layers - 1)
+#         self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+#
+#     def forward(self, x):
+#         for i, layer in enumerate(self.layers):
+#             x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+#         return x
 
 
 class Transformer(nn.Module):
@@ -304,8 +304,7 @@ class DetrV1(DetrModel):
             num_decoder_layers=dec_layers,
         )
 
-        self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
-        self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
+        self.head = DetrHead(hidden_dim, hidden_dim, 4, 3, num_classes + 1)
         self.query_embed = nn.Embedding(num_queries, hidden_dim)
         self.input_proj = nn.Conv2d(num_channels, hidden_dim, kernel_size=1)
 
@@ -316,40 +315,7 @@ class DetrV1(DetrModel):
         assert mask is not None
         hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1])[0]
 
-        outputs_class = self.class_embed(hs)
-        outputs_coord = self.bbox_embed(hs).sigmoid()
-        outputs = {'pred_logits': outputs_class[-1],
-                   'pred_boxes': outputs_coord[-1],
-                   'aux_outputs': self._set_aux_loss(outputs_class, outputs_coord)}
-
-        if self.training:
-            return outputs
-        z = self._inference(outputs, orig_target_sizes)
-        return z, outputs
-
-    def _inference(self, outputs, target_sizes):
-        out_logits, out_bbox = outputs['pred_logits'], outputs['pred_boxes']
-
-        prob = F.softmax(out_logits, -1)
-        scores, labels = prob[..., :-1].max(-1)
-
-        boxes = box_convert(out_bbox, 'cxcywh', 'xyxy')
-
-        img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
-        boxes = boxes * scale_fct[:, None, :]
-
-        results = [{'scores': s, 'labels': l, 'boxes': b} for s, l, b in zip(scores, labels, boxes)]
-
-        return results
-
-    @torch.jit.unused
-    def _set_aux_loss(self, outputs_class, outputs_coord):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
-        return [{'pred_logits': a, 'pred_boxes': b}
-                for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
+        return self.head(hs, orig_target_sizes)
 
     def on_fit_start(self) -> None:
         matcher = HungarianMatcher(cost_class=1, cost_bbox=5, cost_giou=2)
