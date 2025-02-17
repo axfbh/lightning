@@ -33,6 +33,14 @@ class DeformableDETR(DetrModel):
                                  return_interm_layers={"layer2": "0", "layer3": "1", "layer4": "2"},
                                  norm_layer=FrozenBatchNorm2d)
 
+        N_steps = hidden_dim // 2
+
+        self.position_embedding = PositionEmbeddingSine(N_steps, normalize=True)
+
+        self.dec_layers = dec_layers
+
+        self.num_classes = num_classes
+
         num_backbone_outs = len(strides)
         input_proj_list = []
         for i in range(num_backbone_outs):  # 3个1x1conv
@@ -48,14 +56,6 @@ class DeformableDETR(DetrModel):
         ))
         self.input_proj = nn.ModuleList(input_proj_list)
 
-        N_steps = hidden_dim // 2
-
-        self.position_embedding = PositionEmbeddingSine(N_steps, normalize=True)
-
-        self.dec_layers = dec_layers
-
-        self.num_classes = num_classes
-
         # self.transformer = Transformer(
         #     d_model=hidden_dim,
         #     nhead=num_heads,
@@ -66,7 +66,6 @@ class DeformableDETR(DetrModel):
         #
         # self.head = DetrHead(hidden_dim, hidden_dim, 4, 3, num_classes + 1)
         # self.query_embed = nn.Embedding(num_queries, hidden_dim)
-        # self.input_proj = nn.Conv2d(num_channels, hidden_dim, kernel_size=1)
 
     def forward(self, samples: NestedTensor, orig_target_sizes):
         features = self.backbone(samples)
