@@ -7,32 +7,34 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.fabric.utilities.rank_zero import rank_zero_info
 
 from ops.utils import extract_ip
-from ops.utils.callbacks import WarmupLR, LitProgressBar
 from ops.utils.logging import colorstr
 from ops.utils.torch_utils import auto_distribute
-from ops.models.detection.detr.detrv1 import DetrV1
+from ops.utils.callbacks import WarmupLR, LitProgressBar
 
 from ops.dataset.coco_dataset import create_dataloader
+
+from ops.models.detection.detr.base_detr import BaseDetr
+from ops.models.detection.detr.deformable_detr import DeformableDETR
+
 from functools import partial
 
 
 def is_exist_model(path):
     _dir, _file = os.path.split(path)
     prefix, suffix = os.path.splitext(_file)
-    name = prefix[:4]
-    version = prefix[4:6]
+    name = prefix
     if os.path.exists(path):
         model = OmegaConf.load(path)
-    elif os.path.exists(f'./cfg/models/detr/{version}/{name}{version}{suffix}'):
-        model = OmegaConf.load(f'./cfg/models/detr/{version}/{name}{version}{suffix}')
+    elif os.path.exists(f'./cfg/models/detr/{name}/{name}{suffix}'):
+        model = OmegaConf.load(f'./cfg/models/detr/{name}/{name}{suffix}')
     else:
         raise FileNotFoundError(f'{path} file is not exits')
-    return model, version
+    return model, name
 
 
 class Detr:
     def __init__(self, model: str, weight: str = None):
-        model, version = is_exist_model(model)
+        model, name = is_exist_model(model)
         hidden_dim = model.hidden_dim
         num_heads = model.num_heads
         dim_feedforward = model.dim_feedforward
@@ -40,21 +42,32 @@ class Detr:
         dec_layers = model.dec_layers
         num_queries = model.num_queries
         num_channels = model.num_channels
+        strides = model.strides if hasattr(model, 'strides') else None
         num_classes = model.nc
 
         self.weight = weight
 
         self.model = {
-            'v1': partial(DetrV1,
-                          hidden_dim=hidden_dim,
-                          num_heads=num_heads,
-                          dim_feedforward=dim_feedforward,
-                          enc_layers=enc_layers,
-                          dec_layers=dec_layers,
-                          num_channels=num_channels,
-                          num_queries=num_queries,
-                          num_classes=num_classes)
-        }[version]
+            'detr': partial(BaseDetr,
+                            hidden_dim=hidden_dim,
+                            num_heads=num_heads,
+                            dim_feedforward=dim_feedforward,
+                            enc_layers=enc_layers,
+                            dec_layers=dec_layers,
+                            num_channels=num_channels,
+                            num_queries=num_queries,
+                            num_classes=num_classes),
+            'deformable_detr': partial(DeformableDETR,
+                                       hidden_dim=hidden_dim,
+                                       num_heads=num_heads,
+                                       dim_feedforward=dim_feedforward,
+                                       enc_layers=enc_layers,
+                                       dec_layers=dec_layers,
+                                       strides=strides,
+                                       num_channels=num_channels,
+                                       num_queries=num_queries,
+                                       num_classes=num_classes)
+        }[name]
 
     def train(self,
               *,

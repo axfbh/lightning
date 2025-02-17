@@ -220,7 +220,7 @@ def _get_activation_fn(activation):
     raise RuntimeError(F"activation should be relu/gelu, not {activation}.")
 
 
-class DetrV1(DetrModel):
+class BaseDetr(DetrModel):
     def __init__(self,
                  hidden_dim,
                  num_heads,
@@ -232,7 +232,7 @@ class DetrV1(DetrModel):
                  num_classes,
                  *args,
                  **kwargs):
-        super(DetrV1, self).__init__(*args, **kwargs)
+        super(BaseDetr, self).__init__(*args, **kwargs)
 
         self.backbone = Backbone(name='resnet50',
                                  layers_to_train=['layer2', 'layer3', 'layer4'],
