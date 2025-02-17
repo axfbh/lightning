@@ -19,6 +19,11 @@ from ops.utils.torch_utils import nested_tensor_from_tensor_list
 PIN_MEMORY = str(os.getenv("PIN_MEMORY", True)).lower() == "true"  # global pin_memory for dataloaders
 
 
+def get_coco_api_from_dataset(dataset):
+    if isinstance(dataset, torchvision.datasets.CocoDetection):
+        return dataset.coco
+
+
 def collate_fn(batch):
     batch = list(zip(*batch))
     batch[0] = nested_tensor_from_tensor_list(batch[0])

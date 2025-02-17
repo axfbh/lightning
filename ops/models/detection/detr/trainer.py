@@ -105,8 +105,6 @@ class Detr:
                                                         shuffle=False,
                                                         persistent_workers=True)
 
-        model.val_dataset = val_dataset
-
         # ------------ trainer ------------
         accelerator = hyp.device if hyp.device in ["cpu", "tpu", "ipu", "hpu", "mps"] else 'gpu'
 

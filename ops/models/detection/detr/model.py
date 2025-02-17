@@ -4,14 +4,8 @@ import torch
 from lightning import LightningModule
 
 from ops.metric.DDectectionMetric import CocoEvaluator
-from ops.utils.torch_utils import ModelEMA, smart_optimizer
-from ops.utils.torch_utils import one_linear
-import torchvision
-
-
-def get_coco_api_from_dataset(dataset):
-    if isinstance(dataset, torchvision.datasets.CocoDetection):
-        return dataset.coco
+from ops.utils.torch_utils import ModelEMA, smart_optimizer, one_linear
+from ops.dataset.coco_dataset import get_coco_api_from_dataset
 
 
 class DetrModel(LightningModule):
@@ -49,7 +43,7 @@ class DetrModel(LightningModule):
 
     def on_validation_start(self) -> None:
         if not self.trainer.sanity_checking:
-            base_ds = get_coco_api_from_dataset(self.val_dataset)
+            base_ds = get_coco_api_from_dataset(self.trainer.val_dataloaders.dataset)
             self.metric = CocoEvaluator(base_ds, ['bbox'])
 
     def validation_step(self, batch, batch_idx):

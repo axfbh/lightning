@@ -146,11 +146,10 @@ class TransformerEncoderLayer(nn.Module):
     def with_pos_embed(self, tensor, pos: Optional[Tensor]):
         return tensor if pos is None else tensor + pos
 
-    def forward_post(self,
-                     src,
-                     src_mask: Optional[Tensor] = None,
-                     src_key_padding_mask: Optional[Tensor] = None,
-                     pos: Optional[Tensor] = None):
+    def forward(self, src,
+                src_mask: Optional[Tensor] = None,
+                src_key_padding_mask: Optional[Tensor] = None,
+                pos: Optional[Tensor] = None):
         q = k = self.with_pos_embed(src, pos)
         src2 = self.self_attn(q, k, value=src, attn_mask=src_mask,
                               key_padding_mask=src_key_padding_mask)[0]
@@ -160,12 +159,6 @@ class TransformerEncoderLayer(nn.Module):
         src = src + self.dropout2(src2)
         src = self.norm2(src)
         return src
-
-    def forward(self, src,
-                src_mask: Optional[Tensor] = None,
-                src_key_padding_mask: Optional[Tensor] = None,
-                pos: Optional[Tensor] = None):
-        return self.forward_post(src, src_mask, src_key_padding_mask, pos)
 
 
 class TransformerDecoderLayer(nn.Module):
@@ -191,13 +184,14 @@ class TransformerDecoderLayer(nn.Module):
     def with_pos_embed(self, tensor, pos: Optional[Tensor]):
         return tensor if pos is None else tensor + pos
 
-    def forward_post(self, tgt, memory,
-                     tgt_mask: Optional[Tensor] = None,
-                     memory_mask: Optional[Tensor] = None,
-                     tgt_key_padding_mask: Optional[Tensor] = None,
-                     memory_key_padding_mask: Optional[Tensor] = None,
-                     pos: Optional[Tensor] = None,
-                     query_pos: Optional[Tensor] = None):
+    def forward(self, tgt, memory,
+                tgt_mask: Optional[Tensor] = None,
+                memory_mask: Optional[Tensor] = None,
+                tgt_key_padding_mask: Optional[Tensor] = None,
+                memory_key_padding_mask: Optional[Tensor] = None,
+                pos: Optional[Tensor] = None,
+                query_pos: Optional[Tensor] = None):
+
         q = k = self.with_pos_embed(tgt, query_pos)
         tgt2 = self.self_attn(q, k, value=tgt, attn_mask=tgt_mask,
                               key_padding_mask=tgt_key_padding_mask)[0]
@@ -214,16 +208,6 @@ class TransformerDecoderLayer(nn.Module):
         tgt = self.norm3(tgt)
         return tgt
 
-    def forward(self, tgt, memory,
-                tgt_mask: Optional[Tensor] = None,
-                memory_mask: Optional[Tensor] = None,
-                tgt_key_padding_mask: Optional[Tensor] = None,
-                memory_key_padding_mask: Optional[Tensor] = None,
-                pos: Optional[Tensor] = None,
-                query_pos: Optional[Tensor] = None):
-        return self.forward_post(tgt, memory, tgt_mask, memory_mask,
-                                 tgt_key_padding_mask, memory_key_padding_mask, pos, query_pos)
-
 
 def _get_activation_fn(activation):
     """Return an activation function given a string"""
@@ -234,22 +218,6 @@ def _get_activation_fn(activation):
     if activation == "glu":
         return F.glu
     raise RuntimeError(F"activation should be relu/gelu, not {activation}.")
-
-
-class Joiner(nn.Sequential):
-    def __init__(self, backbone, position_embedding):
-        super().__init__(backbone, position_embedding)
-
-    def forward(self, tensor_list: NestedTensor):
-        xs = self[0](tensor_list)
-        out: List[NestedTensor] = []
-        pos = []
-        for name, x in xs.items():
-            out.append(x)
-            # position encoding
-            pos.append(self[1](x).to(x.tensors.dtype))
-
-        return out, pos
 
 
 class DetrV1(DetrModel):
@@ -266,20 +234,18 @@ class DetrV1(DetrModel):
                  **kwargs):
         super(DetrV1, self).__init__(*args, **kwargs)
 
-        backbone = Backbone(name='resnet50',
-                            layers_to_train=['layer2', 'layer3', 'layer4'],
-                            return_interm_layers={'layer4': "0"},
-                            norm_layer=FrozenBatchNorm2d)
+        self.backbone = Backbone(name='resnet50',
+                                 layers_to_train=['layer2', 'layer3', 'layer4'],
+                                 return_interm_layers={'layer4': "0"},
+                                 norm_layer=FrozenBatchNorm2d)
 
         N_steps = hidden_dim // 2
 
-        position_embedding = PositionEmbeddingSine(N_steps, normalize=True)
+        self.position_embedding = PositionEmbeddingSine(N_steps, normalize=True)
 
         self.dec_layers = dec_layers
 
         self.num_classes = num_classes
-
-        self.backbone = Joiner(backbone, position_embedding)
 
         self.transformer = Transformer(
             d_model=hidden_dim,
@@ -294,11 +260,12 @@ class DetrV1(DetrModel):
         self.input_proj = nn.Conv2d(num_channels, hidden_dim, kernel_size=1)
 
     def forward(self, samples: NestedTensor, orig_target_sizes):
-        features, pos = self.backbone(samples)
+        features = self.backbone(samples)['0']
 
-        src, mask = features[-1].decompose()
-        assert mask is not None
-        hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1])[0]
+        pos = self.position_embedding(features)
+
+        src, mask = features.decompose()
+        hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos)[0]
 
         return self.head(hs, orig_target_sizes)
 
