@@ -19,7 +19,7 @@ class Transformer(nn.Module):
 
     def __init__(self, d_model=512, nhead=8, num_encoder_layers=6,
                  num_decoder_layers=6, dim_feedforward=2048, dropout=0.1,
-                 activation="relu"):
+                 activation="relu", return_intermediate_dec=False):
         super().__init__()
 
         encoder_layer = TransformerEncoderLayer(d_model, nhead, dim_feedforward, dropout, activation)
@@ -27,7 +27,7 @@ class Transformer(nn.Module):
 
         decoder_layer = TransformerDecoderLayer(d_model, nhead, dim_feedforward, dropout, activation)
         decoder_norm = nn.LayerNorm(d_model)
-        self.decoder = TransformerDecoder(decoder_layer, num_decoder_layers, decoder_norm, True)
+        self.decoder = TransformerDecoder(decoder_layer, num_decoder_layers, decoder_norm, return_intermediate_dec)
 
         self._reset_parameters()
 
@@ -191,7 +191,6 @@ class TransformerDecoderLayer(nn.Module):
                 memory_key_padding_mask: Optional[Tensor] = None,
                 pos: Optional[Tensor] = None,
                 query_pos: Optional[Tensor] = None):
-
         q = k = self.with_pos_embed(tgt, query_pos)
         tgt2 = self.self_attn(q, k, value=tgt, attn_mask=tgt_mask,
                               key_padding_mask=tgt_key_padding_mask)[0]
@@ -253,6 +252,7 @@ class BaseDetr(DetrModel):
             dim_feedforward=dim_feedforward,
             num_encoder_layers=enc_layers,
             num_decoder_layers=dec_layers,
+            return_intermediate_dec=True,
         )
 
         self.head = DetrHead(hidden_dim, hidden_dim, 4, 3, num_classes + 1)

@@ -43,6 +43,8 @@ class Detr:
         num_queries = model.num_queries
         num_channels = model.num_channels
         strides = model.strides if hasattr(model, 'strides') else None
+        dec_n_points = model.dec_n_points if hasattr(model, 'dec_n_points') else None
+        enc_n_points = model.enc_n_points if hasattr(model, 'enc_n_points') else None
         num_classes = model.nc
 
         self.weight = weight
@@ -66,7 +68,9 @@ class Detr:
                                        strides=strides,
                                        num_channels=num_channels,
                                        num_queries=num_queries,
-                                       num_classes=num_classes)
+                                       num_classes=num_classes,
+                                       dec_n_points=dec_n_points,
+                                       enc_n_points=enc_n_points)
         }[name]
 
     def train(self,
