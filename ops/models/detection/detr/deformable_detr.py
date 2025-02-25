@@ -494,7 +494,7 @@ class DeformableDETR(DetrModel):
                                         4,
                                         3,
                                         num_classes + 1,
-                                        num_backbone_outs + 1)
+                                        dec_layers)
 
     def forward(self, samples: NestedTensor, orig_target_sizes):
         features = self.backbone(samples)

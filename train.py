@@ -17,5 +17,5 @@ if __name__ == '__main__':
     model.train(data="./cfg/datasets/coco.yaml",
                 imgsz=[640, 640],
                 epochs=300,
-                batch=8,
+                batch=4,
                 weight_dict={'loss_ce': 1, 'loss_bbox': 5, 'loss_giou': 2})
