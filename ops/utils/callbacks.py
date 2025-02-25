@@ -232,6 +232,7 @@ class LitProgressBar(ProgressBar):
         super().__init__()  # don't forget this :)
         self.enable = True
         self.refresh_rate = refresh_rate
+        self.prev_mean = None
 
     def disable(self):
         self.enable = False
@@ -249,9 +250,14 @@ class LitProgressBar(ProgressBar):
             if name.endswith('step'):
                 name = name[:-5]
                 if name.startswith('loss'):
-                    loss_str.append(
-                        "{}: {:.4f} ({:.4f})".format(name, meter, meters_mean[name])
-                    )
+                    if self.prev_mean is None:
+                        loss_str.append(
+                            "{}: {:.4f} ({:.4f})".format(name, meter, meters_mean[name])
+                        )
+                    else:
+                        loss_str.append(
+                            "{}: {:.4f} ({:.4f}-{:.4f})".format(name, meter, self.prev_mean[name], meters_mean[name])
+                        )
                 else:
                     loss_str.append(
                         "{}: {:.4f} ".format(name, meter)
@@ -285,11 +291,13 @@ class LitProgressBar(ProgressBar):
                 'max mem: {memory:.2f} GB'
             ])
 
-            print(log_msg.format(
-                batch_idx,
-                self.total_train_batches,
-                meters=self.get_meters(trainer, pl_module),
-                memory=torch.cuda.max_memory_allocated() / MB))
+            print(log_msg.format(batch_idx,
+                                 self.total_train_batches,
+                                 meters=self.get_meters(trainer, pl_module),
+                                 memory=torch.cuda.max_memory_allocated() / MB))
+
+    def on_train_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
+        self.prev_mean = self.get_meters_mean(trainer)
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
         super(LitProgressBar, self).on_validation_batch_end(trainer, pl_module, outputs, batch, batch_idx,
@@ -308,8 +316,10 @@ class LitProgressBar(ProgressBar):
                 'max mem: {memory:.2f} GB'
             ])
 
-            print(log_msg.format(
-                batch_idx,
-                self.total_val_batches,
-                meters=self.get_meters(trainer, pl_module),
-                memory=torch.cuda.max_memory_allocated() / MB))
+            print(log_msg.format(batch_idx,
+                                 self.total_val_batches,
+                                 meters=self.get_meters(trainer, pl_module),
+                                 memory=torch.cuda.max_memory_allocated() / MB))
+
+    def on_validation_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
+        self.prev_mean = self.get_meters_mean(trainer)

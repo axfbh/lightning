@@ -490,11 +490,11 @@ class DeformableDETR(DetrModel):
             return_intermediate_dec=True,
         )
         self.head = DeformableDetrHead(hidden_dim,
-                                        hidden_dim,
-                                        4,
-                                        3,
-                                        num_classes + 1,
-                                        dec_layers)
+                                       hidden_dim,
+                                       4,
+                                       3,
+                                       num_classes + 1,
+                                       dec_layers)
 
     def forward(self, samples: NestedTensor, orig_target_sizes):
         features = self.backbone(samples)
